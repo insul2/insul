@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculadora Inteligente de Dose de Insulina</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0f172a;
+      --bg-card: #1e293b;
+      --bg-input: #0f172a;
+      --border-color: #334155;
+      --primary: #38bdf8;
+      --primary-hover: #0284c7;
+      --accent: #f43f5e;
+      --accent-warning: #f59e0b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --success: #10b981;
+      --card-glow: rgba(56, 189, 248, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 900px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 24px;
+    }
+
+    @media (max-width: 900px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+      position: relative;
+    }
+
+    .card-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: var(--primary);
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.825rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .form-control {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text-main);
+      font-size: 0.95rem;
+      font-weight: 500;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .form-control:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px var(--card-glow);
+    }
+
+    select.form-control {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%20%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      background-size: 16px;
+      padding-right: 32px;
+    }
+
+    .input-unit {
+      position: absolute;
+      right: 12px;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .btn-calc {
+      width: 100%;
+      background: var(--primary);
+      color: #0f172a;
+      border: none;
+      border-radius: 8px;
+      padding: 14px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      margin-top: 8px;
+    }
+
+    .btn-calc:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-calc:active {
+      transform: scale(0.98);
+    }
+
+    .btn-help {
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: var(--primary);
+      border-radius: 20px;
+      padding: 6px 14px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-help:hover {
+      background: rgba(56, 189, 248, 0.2);
+    }
+
+    .btn-wizard {
+      width: 100%;
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid var(--success);
+      color: var(--success);
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn-wizard:hover {
+      background: rgba(16, 185, 129, 0.25);
+    }
+
+    /* Result Panel */
+    .result-display {
+      text-align: center;
+      padding: 20px;
+      background: rgba(15, 23, 42, 0.6);
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      margin-bottom: 20px;
+    }
+
+    .dose-value {
+      font-size: 3.5rem;
+      font-weight: 700;
+      color: var(--primary);
+      line-height: 1;
+      margin: 10px 0;
+    }
+
+    .dose-unit {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .breakdown-list {
+      list-style: none;
+      font-size: 0.875rem;
+    }
+
+    .breakdown-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .breakdown-item:last-child {
+      border-bottom: none;
+    }
+
+    .breakdown-label {
+      color: var(--text-muted);
+    }
+
+    .breakdown-val {
+      font-weight: 600;
+    }
+
+    .alert-box {
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .alert-danger {
+      background: rgba(244, 63, 94, 0.15);
+      border: 1px solid rgba(244, 63, 94, 0.3);
+      color: #fda4af;
+    }
+
+    .alert-warning {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #fde68a;
+    }
+
+    .section-title {
+      font-size: 0.75rem;
+      color: var(--primary);
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+
+    /* Explanation Card */
+    .param-info-card {
+      background: rgba(15, 23, 42, 0.4);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      font-size: 0.85rem;
+    }
+
+    .param-info-header {
+      font-weight: 600;
+      color: var(--primary);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .param-info-desc {
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    /* Modal Component */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(4px);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+      padding: 20px;
+    }
+
+    .modal-card {
+      background: var(--bg-card);
+      border: 1px solid var(--primary);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 520px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Form Box -->
+    <div class="card">
+      <div class="card-title">
+        <span>🩸 Calculadora de Bolus</span>
+        <button class="btn-help" onclick="openHelpModal()">❓ Guia / Ajuda</button>
+      </div>
+
+      <!-- SEÇÃO 1: Dados do Usuário & Insulina -->
+      <div class="section-title">👤 Perfil & Insulina</div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="weight">Peso</label>
+          <div class="input-wrapper">
+            <input type="number" id="weight" class="form-control" placeholder="70" value="70" onchange="updateIMC()">
+            <span class="input-unit">kg</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="height">Altura</label>
+          <div class="input-wrapper">
+            <input type="number" id="height" class="form-control" placeholder="175" value="175" onchange="updateIMC()">
+            <span class="input-unit">cm</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label for="insulinType">Tipo de Insulina</label>
+          <select id="insulinType" class="form-control" onchange="onInsulinTypeChange()">
+            <option value="ULTRA_RAPID" selected>Análogo Ultrarrápido (Lispro/Aspart/Fiasp)</option>
+            <option value="RAPID">Regular Humana (Novolin R / Humulin R)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="mealPeriod">Refeição / Horário</label>
+          <select id="mealPeriod" class="form-control" onchange="onPeriodChange()">
+            <option value="AUTO">⏰ Auto (Horário Atual)</option>
+            <option value="BREAKFAST">🌅 Café da Manhã</option>
+            <option value="LUNCH">☀️ Almoço / Tarde</option>
+            <option value="DINNER">🌙 Jantar</option>
+            <option value="NIGHT">🌌 Madrugada</option>
+          </select>
+        </div>
+      </div>
+
+      <hr style="border-color: var(--border-color); margin: 16px 0;">
+
+      <!-- SEÇÃO 2: Dados da Medição e Refeição -->
+      <div class="section-title">📊 Dados do Momento</div>
+      <div class="grid-3">
+        <div class="form-group">
+          <label for="currentGlucose">Glicemia Atual</label>
+          <div class="input-wrapper">
+            <input type="number" id="currentGlucose" class="form-control" placeholder="120" value="150" oninput="calculateDose()">
+            <span class="input-unit">mg/dL</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="carbs">Carboidratos</label>
+          <div class="input-wrapper">
+            <input type="number" id="carbs" class="form-control" placeholder="0" value="45" oninput="calculateDose()">
+            <span class="input-unit">g</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="iob">Insulina Ativa (IOB)</label>
+          <div class="input-wrapper">
+            <input type="number" id="iob" class="form-control" step="0.1" placeholder="0.0" value="0.5" oninput="calculateDose()">
+            <span class="input-unit">U</span>
+          </div>
+        </div>
+      </div>
+
+      <hr style="border-color: var(--border-color); margin: 16px 0;">
+
+      <!-- SEÇÃO 3: Parâmetros de Cálculo -->
+      <div class="section-title">⚙️ Parâmetros do Perfil Ativo</div>
+      
+      <button class="btn-wizard" onclick="openWizard()">
+        🪄 Assistente para Leigos: Descobrir Meus Parâmetros
+      </button>
+
+      <div class="grid-3">
+        <div class="form-group">
+          <label for="targetGlucose">Alvo (mg/dL)</label>
+          <input type="number" id="targetGlucose" class="form-control" value="100" oninput="calculateDose()">
+        </div>
+        <div class="form-group">
+          <label for="icr">ICR (g/U)</label>
+          <input type="number" id="icr" class="form-control" value="10" oninput="calculateDose()">
+        </div>
+        <div class="form-group">
+          <label for="isf">ISF (mg/dL/U)</label>
+          <input type="number" id="isf" class="form-control" value="40" oninput="calculateDose()">
+        </div>
+      </div>
+
+      <button class="btn-calc" onclick="calculateDose()">Calcular Dose Recomendada</button>
+    </div>
+
+    <!-- Right Column: Result Box -->
+    <div style="display: flex; flex-direction: column; gap: 24px;">
+      
+      <!-- Result Box -->
+      <div class="card">
+        <div class="card-title">
+          📋 Resumo da Recomendação
+        </div>
+
+        <div id="alertBox" class="alert-box alert-danger"></div>
+
+        <div class="result-display">
+          <div style="font-size: 0.8rem; color: var(--text-muted); letter-spacing: 0.05em; font-weight: 600;">DOSE FINAL SUGERIDA</div>
+          <div class="dose-value" id="totalDoseDisplay">0.0</div>
+          <div class="dose-unit">Unidades (U)</div>
+        </div>
+
+        <ul class="breakdown-list">
+          <li class="breakdown-item">
+            <span class="breakdown-label">IMC Atual</span>
+            <span class="breakdown-val" id="imcVal">22.9 kg/m²</span>
+          </li>
+          <li class="breakdown-item">
+            <span class="breakdown-label">Insulina Selecionada</span>
+            <span class="breakdown-val" id="selectedInsulinVal">Ultrarrápida (DIA: 4h)</span>
+          </li>
+          <li class="breakdown-item">
+            <span class="breakdown-label">Período / Refeição</span>
+            <span class="breakdown-val" id="selectedPeriodVal">Almoço / Tarde</span>
+          </li>
+          <li class="breakdown-item">
+            <span class="breakdown-label">Bolus Alimentar (Carbs)</span>
+            <span class="breakdown-val" id="foodBolusVal">+0.0 U</span>
+          </li>
+          <li class="breakdown-item">
+            <span class="breakdown-label">Bolus Corretivo (Glicemia)</span>
+            <span class="breakdown-val" id="corrBolusVal">+0.0 U</span>
+          </li>
+          <li class="breakdown-item">
+            <span class="breakdown-label">Desconto Insulina Ativa (IOB)</span>
+            <span class="breakdown-val" id="iobDiscountVal">-0.0 U</span>
+          </li>
+          <li class="breakdown-item" style="margin-top: 8px; padding-top: 10px; border-top: 1px dashed var(--border-color);">
+            <span class="breakdown-label">Arredondamento Caneta (0.5U)</span>
+            <span class="breakdown-val" id="roundedDoseVal" style="color: var(--primary);">0.0 U</span>
+          </li>
+        </ul>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Modal Explicação / Guia -->
+  <div class="modal-overlay" id="helpModal">
+    <div class="modal-card">
+      <div class="card-title" style="border-bottom: 1px solid var(--border-color); margin-bottom: 16px;">
+        <span>📖 Guia Completo dos Parâmetros</span>
+        <button class="btn-help" onclick="closeHelpModal()">✖ Fechar</button>
+      </div>
+
+      <div class="param-info-card">
+        <div class="param-info-header">🎯 Glicemia Alvo (Target)</div>
+        <div class="param-info-desc">
+          É o valor de glicemia que você e seu médico definem como <b>ideal</b> (ex: 100 mg/dL). Se sua glicemia estiver acima deste valor, o app calcula uma correção.
+        </div>
+      </div>
+
+      <div class="param-info-card">
+        <div class="param-info-header">🍞 ICR (Razão Carboidrato / Insulina)</div>
+        <div class="param-info-desc">
+          Indica <b>quantos gramas de carboidrato 1 unidade de insulina cobre</b>.
+          <br><i>Exemplo:</i> ICR = 10 g/U significa que 1U metaboliza 10g de carboidratos.
+        </div>
+      </div>
+
+      <div class="param-info-card">
+        <div class="param-info-header">⚡ ISF (Fator de Sensibilidade à Insulina)</div>
+        <div class="param-info-desc">
+          Indica <b>quantos mg/dL a sua glicemia cai com 1 unidade de insulina</b>.
+          <br><i>Exemplo:</i> ISF = 40 mg/dL/U significa que 1U baixa a glicemia em 40 mg/dL.
+        </div>
+      </div>
+
+      <div class="param-info-card">
+        <div class="param-info-header">⏳ IOB (Insulina Ativa / Insulin on Board)</div>
+        <div class="param-info-desc">
+          É a insulina de doses anteriores que <b>ainda está agindo no seu corpo</b>. O aplicativo desconta esse valor da correção para evitar que você aplique insulina em excesso (empilhamento) e tenha hipoglicemia.
+        </div>
+      </div>
+
+      <button class="btn-calc" style="margin-top: 15px;" onclick="closeHelpModal()">Entendi!</button>
+    </div>
+  </div>
+
+  <!-- Modal Wizard para Leigos -->
+  <div class="modal-overlay" id="wizardModal">
+    <div class="modal-card">
+      <div class="card-title" style="border-bottom: none; margin-bottom: 12px;">
+        🪄 Assistente Guia para Leigos
+      </div>
+      <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.4;">
+        Não sabe o que é ICR ou ISF? Sem problemas! Informe quantas unidades de insulina você toma no dia inteiro (somando a lenta e a rápida de todas as refeições).
+      </p>
+
+      <div class="form-group">
+        <label for="tddInput">Dose Total Diária de Insulina (DTD)</label>
+        <div class="input-wrapper">
+          <input type="number" id="tddInput" class="form-control" placeholder="Ex: 40" value="40">
+          <span class="input-unit">U/dia</span>
+        </div>
+      </div>
+
+      <div id="wizardResult" style="margin-top: 15px; font-size: 0.85rem; display: none;" class="param-info-card">
+        <div style="color: var(--success); font-weight: 600; margin-bottom: 6px;">✨ Estimativa Calculada:</div>
+        <div>• <b>ICR Estimado:</b> 1U para cada <span id="estIcr" style="color: var(--primary); font-weight: bold;">10</span>g de carboidrato (Regra 500)</div>
+        <div>• <b>ISF Estimado:</b> 1U baixa <span id="estIsf" style="color: var(--primary); font-weight: bold;">45</span> mg/dL (Regra 1800)</div>
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <button class="btn-calc" style="background: var(--border-color); color: var(--text-main);" onclick="closeWizard()">Cancelar</button>
+        <button class="btn-calc" onclick="applyWizardEstimates()">Aplicar no Meu Perfil</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const profiles = {
+      BREAKFAST: { name: '🌅 Café da Manhã', icr: 9, isf: 32, target: 100 },
+      LUNCH:     { name: '☀️ Almoço / Tarde', icr: 13, isf: 42, target: 100 },
+      DINNER:    { name: '🌙 Jantar',         icr: 11, isf: 38, target: 110 },
+      NIGHT:     { name: '🌌 Madrugada',      icr: 17, isf: 55, target: 120 }
+    };
+
+    function openHelpModal() {
+      document.getElementById('helpModal').style.display = 'flex';
+    }
+
+    function closeHelpModal() {
+      document.getElementById('helpModal').style.display = 'none';
+    }
+
+    function openWizard() {
+      document.getElementById('wizardModal').style.display = 'flex';
+      calculateWizard();
+    }
+
+    function closeWizard() {
+      document.getElementById('wizardModal').style.display = 'none';
+    }
+
+    document.getElementById('tddInput').addEventListener('input', calculateWizard);
+
+    function calculateWizard() {
+      const tdd = parseFloat(document.getElementById('tddInput').value) || 0;
+      const resBox = document.getElementById('wizardResult');
+      
+      if (tdd > 0) {
+        const estIcr = Math.round(500 / tdd);
+        const estIsf = Math.round(1800 / tdd);
+        document.getElementById('estIcr').innerText = estIcr;
+        document.getElementById('estIsf').innerText = estIsf;
+        resBox.style.display = 'block';
+      } else {
+        resBox.style.display = 'none';
+      }
+    }
+
+    function applyWizardEstimates() {
+      const tdd = parseFloat(document.getElementById('tddInput').value) || 0;
+      if (tdd > 0) {
+        const estIcr = Math.round(500 / tdd);
+        const estIsf = Math.round(1800 / tdd);
+        
+        document.getElementById('icr').value = estIcr;
+        document.getElementById('isf').value = estIsf;
+        closeWizard();
+        calculateDose();
+      }
+    }
+
+    function updateIMC() {
+      const weight = parseFloat(document.getElementById('weight').value) || 0;
+      const heightCm = parseFloat(document.getElementById('height').value) || 0;
+
+      if (weight > 0 && heightCm > 0) {
+        const heightM = heightCm / 100;
+        const imc = weight / (heightM * heightM);
+        document.getElementById('imcVal').innerText = `${imc.toFixed(1)} kg/m²`;
+      } else {
+        document.getElementById('imcVal').innerText = '-';
+      }
+    }
+
+    function getAutoPeriodKey() {
+      const hour = new Date().getHours();
+      if (hour >= 6 && hour <= 11) return 'BREAKFAST';
+      if (hour >= 12 && hour <= 17) return 'LUNCH';
+      if (hour >= 18 && hour <= 21) return 'DINNER';
+      return 'NIGHT';
+    }
+
+    function onPeriodChange() {
+      let periodKey = document.getElementById('mealPeriod').value;
+      if (periodKey === 'AUTO') {
+        periodKey = getAutoPeriodKey();
+      }
+
+      const active = profiles[periodKey];
+      document.getElementById('icr').value = active.icr;
+      document.getElementById('isf').value = active.isf;
+      document.getElementById('targetGlucose').value = active.target;
+      document.getElementById('selectedPeriodVal').innerText = active.name;
+
+      calculateDose();
+    }
+
+    function onInsulinTypeChange() {
+      const type = document.getElementById('insulinType').value;
+      if (type === 'ULTRA_RAPID') {
+        document.getElementById('selectedInsulinVal').innerText = 'Ultrarrápida (DIA: 4h)';
+      } else {
+        document.getElementById('selectedInsulinVal').innerText = 'Regular Humana (DIA: 6h)';
+      }
+      calculateDose();
+    }
+
+    function calculateDose() {
+      const bg = parseFloat(document.getElementById('currentGlucose').value) || 0;
+      const carbs = parseFloat(document.getElementById('carbs').value) || 0;
+      const iob = parseFloat(document.getElementById('iob').value) || 0;
+      const target = parseFloat(document.getElementById('targetGlucose').value) || 100;
+      const icr = parseFloat(document.getElementById('icr').value) || 10;
+      const isf = parseFloat(document.getElementById('isf').value) || 40;
+
+      const alertBox = document.getElementById('alertBox');
+      alertBox.style.display = 'none';
+
+      // 🚨 REGRA RN-01: Hipoglicemia (< 70 mg/dL)
+      if (bg < 70) {
+        alertBox.className = 'alert-box alert-danger';
+        alertBox.innerHTML = `⚠️ <b>HIPOGLICEMIA DETECTADA (${bg} mg/dL)</b><br>Não aplique insulina. Ingira 15g a 20g de carboidrato rápido e aguarde 15 minutos.`;
+        alertBox.style.display = 'block';
+        
+        document.getElementById('totalDoseDisplay').innerText = '0.0';
+        document.getElementById('foodBolusVal').innerText = '0.0 U';
+        document.getElementById('corrBolusVal').innerText = '0.0 U';
+        document.getElementById('iobDiscountVal').innerText = '-0.0 U';
+        document.getElementById('roundedDoseVal').innerText = '0.0 U';
+        return;
+      }
+
+      // 1. Bolus Alimentar
+      const foodBolus = carbs / icr;
+
+      // 2. Bolus Corretivo
+      const corrBolus = (bg - target) / isf;
+
+      // 3. Aplicação do IOB
+      let effectiveCorr = 0;
+      let iobDiscount = 0;
+
+      if (corrBolus > 0) {
+        effectiveCorr = Math.max(0, corrBolus - iob);
+        iobDiscount = corrBolus - effectiveCorr;
+      } else {
+        effectiveCorr = corrBolus; 
+      }
+
+      // 4. Dose Total Bruta
+      let totalDose = foodBolus + effectiveCorr;
+      if (totalDose < 0) totalDose = 0;
+
+      // 5. Arredondamento (Caneta 0.5U)
+      const roundedDose = Math.round(totalDose * 2) / 2;
+
+      // Alerta de Dose Limite / Segurança
+      if (totalDose > 15) {
+        alertBox.className = 'alert-box alert-warning';
+        alertBox.innerHTML = `⚠️ <b>Atenção:</b> Dose alta calculada (${totalDose.toFixed(1)}U). Verifique os carboidratos inseridos.`;
+        alertBox.style.display = 'block';
+      }
+
+      // Atualiza Tela
+      document.getElementById('totalDoseDisplay').innerText = roundedDose.toFixed(1);
+      document.getElementById('foodBolusVal').innerText = `+${foodBolus.toFixed(2)} U`;
+      document.getElementById('corrBolusVal').innerText = `${corrBolus >= 0 ? '+' : ''}${corrBolus.toFixed(2)} U`;
+      document.getElementById('iobDiscountVal').innerText = `-${iobDiscount.toFixed(2)} U`;
+      document.getElementById('roundedDoseVal').innerText = `${roundedDose.toFixed(1)} U`;
+    }
+
+    // Inicialização
+    window.onload = function() {
+      updateIMC();
+      onPeriodChange();
+      onInsulinTypeChange();
+    };
+  </script>
+</body>
+</html>
