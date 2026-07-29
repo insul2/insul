@@ -1,9 +1,39 @@
 services:
   - type: web
-    name: projetoinsu-calculadora
+    name: leben-backend-api
     env: node
-    buildCommand: npm install
-    startCommand: npm start
+    region: oregon
+    buildCommand: cd backend && npm install
+    startCommand: cd backend && npm start
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: PORT
         value: 10000
+      - key: JWT_SECRET
+        value: leben_super_secret_jwt_key_v4_production
+      - key: AUDIT_SECRET
+        value: LEBEN_CLINICAL_SAFETY_AUDIT_KEY_V4
+      - key: DATABASE_URL
+        fromDatabase:
+          name: leben-db
+          property: connectionString
+
+  - type: static
+    name: leben-frontend-web
+    region: oregon
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://leben-backend-api.onrender.com/api/v1
+
+databases:
+  - name: leben-db
+    databaseName: leben
+    user: leben_user
+    region: oregon

@@ -1,252 +1,104 @@
-# Banco de Dados — ProjetoInsu (MySQL 8.0+)
-## App Pessoal de Cálculo de Bolus de Insulina
+# 🗄️ Arquitetura do Banco de Dados — Insul / Amanda V4 (MySQL 8.0+)
+## Plataforma Completa de Gestão do Diabetes & Suporte ao Bolus
 
-## Diagrama de Relacionamento (ERD)
+---
+
+## 📊 Mapeamento dos Recursos Avançados para a Estrutura de Tabelas
+
+A arquitetura do banco de dados abrange os **recursos do aplicativo + Simulador de Bolus + Gêmeo Digital (Digital Twin)**:
 
 ```
-users (1 conta = 1 diabético)
-  │
-  └──── patients  (perfil: nome, peso, altura, tipo de DM, dispositivo)
-            │
-            ├──── patient_insulins        ← "Que insulinas você toma?"
-            │       (basal: Lantus, Tresiba | bolus: NovoRapid, Humalog)
-            │
-            ├──── patient_medications     ← "Que outros remédios você toma?"
-            │       (Metformina, Jardiance, Ozempic, etc.)
-            │
-            ├──── patient_health_metrics  ← "Registre seus exames"
-            │       (HbA1c, pressão, colesterol, peso ao longo do tempo)
-            │
-            ├──── patient_comorbidities   ← "Outras condições de saúde"
-            │       (Hipertensão, hipotireoidismo, gastroparesia, etc.)
-            │
-            ├──── insulin_profiles        ← "Seus parâmetros de cálculo"
-            │         └── insulin_profile_segments
-            │               (ICR + ISF + Alvo por horário do dia)
-            │
-            ├──── glucose_readings        ← Leituras de glicemia (CGM/capilar)
-            │
-            ├──── meals                   ← Refeições registradas + macros
-            │         └── bolus_events    ← Cada cálculo de dose feito no app
-            │
-            ├──── exercise_events         ← Atividades físicas
-            │
-            ├──── alerts                  ← Avisos automáticos do app
-            │
-            └──── meal_templates          ← Suas refeições favoritas salvas
+[ users ] ──── [ user_patient_permissions ] ──── [ patients ]
+ (Autenticação)      (Médicos, Pais e Cuidadores)      (Biometria & Perfil Clínico)
+                                                            │
+    ┌─────────────────────────┬─────────────────────────────┼─────────────────────────────┬─────────────────────────┐
+    │                         │                             │                             │                         │
+[ glucose_readings ]    [ meals & items ]             [ bolus_events ]            [ exercise_events ]        [ alerts ]
+ (CGM/BGM + Trend)    (Refeições + FPU)             (Snapshot + SHA-256)           (Ajuste ISF 12-24h)     (Hipo/Hiper/Tiras)
+    │                         │                             │                             │                         │
+[ device_integrations ] [ favorite_foods ]            [ ai_photo_logs ]           [ ai_habit_insights ]   [ gamification_goals ]
+ (Dexcom, Libre, Pump) (Alimentos 1-Toque)            (IA Visão Computacional)     (Predições & Padrões)      (Metas & TIR)
+                              │                             │                             │                         │
+                        [ meal_templates ]            [ meal_plans ]              [ ai_chat_sessions ]    [ shopping_lists ]
+                       (Refeições Prontas)         (Prescrição Nutricional)        (Assistente Virtual)    (Compras Automáticas)
+                                                                                          │
+                                                                                  [ bolus_simulations ]
+                                                                                   (Simulador "What-If")
+                                                                                          │
+                                                                                  [ digital_twin_profiles ]
+                                                                                   (Gêmeo Digital por IA)
 
-food_database  (banco global de alimentos TACO + USDA)
-audit_log      (histórico de alterações para sua segurança)
+[ food_database ] (488.123 Alimentos Únicos: TBCA, SBD, TACO, USDA)
+   └── [ glycemic_index_load ] (Índice Glicêmico IG/CG e Categorias de Busca)
+
+[ patient_glycemic_statistics ] (TIR, TAR, TBR, Variabilidade CV%, GMI eAG, Médias por Horário)
+[ audit_log ] (Auditoria Clínica Imutável: IP, Dispositivo, Hash SHA-256)
 ```
 
 ---
 
-## Como o usuário preenche o perfil
+## 📋 Tabela de Correspondência Módulo x Tabela SQL
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  TELA: Meu Perfil                                                │
-├──────────────────────────────────────────────────────────────────┤
-│  📋 Dados Básicos                                                │
-│     Nome/apelido, data de nascimento, tipo de diabetes           │
-│     Peso, altura → IMC calculado automaticamente                 │
-│     Dispositivo: caneta meia unidade / bomba / seringa           │
-│                                                                  │
-│  💉 Minhas Insulinas                                             │
-│     Basal: ex: Lantus 20U às 22h (caneta descartável)           │
-│     Bolus: ex: NovoRapid — caneta de meia unidade               │
-│                                                                  │
-│  💊 Meus Remédios                                                │
-│     ex: Metformina 500mg 2x/dia com refeição                    │
-│     ex: Jardiance 10mg 1x/dia de manhã                          │
-│                                                                  │
-│  ⚙️ Parâmetros de Cálculo (da sua prescrição médica)            │
-│     ICR Manhã: 1U cobre __ g de carb                           │
-│     ISF Manhã: 1U baixa __ mg/dL                               │
-│     Glicemia Alvo: __ mg/dL                                     │
-│     Duração da insulina: __ horas                               │
-│                                                                  │
-│  📊 Histórico de Exames                                          │
-│     HbA1c, pressão, colesterol — registro manual ao longo do    │
-│     tempo para acompanhar sua evolução                          │
-└──────────────────────────────────────────────────────────────────┘
-```
-
-> ⚠️ **Os parâmetros ICR, ISF e Alvo devem ser os valores que seu médico prescreveu.
-> Digite-os exatamente como recebeu. O app usa esses valores para calcular sua dose.**
+| # | Recurso do Aplicativo | Tabelas Envolvidas no Banco | Descrição Técnica no MySQL |
+| :--- | :--- | :--- | :--- |
+| **1** | **Tela Inicial (Dashboard)** | `glucose_readings`, `bolus_events`, `meals` | Leitura da glicemia atual + trend, cálculo de IOB ativo e histórico recente. |
+| **2** | **Calculadora de Bolus Inteligente** | `bolus_events`, `insulin_profile_segments` | Cálculo prandial + corretivo + FPU + desconto de IOB com snapshot imutável. |
+| **3** | **IA Reconhecimento por Foto** | `ai_photo_logs`, `meals` | Log do modelo de visão (Gemini) com itens detectados, gramas e FPU estimado. |
+| **4** | **Leitor de Código de Barras** | `food_database` (`barcode`) | Busca indexada por `EAN-13` na coluna `barcode` única da base de alimentos. |
+| **5** | **Gráficos Sobrepostos & Estatísticas** | `glucose_readings`, `patient_glycemic_statistics` | **TIR (Tempo na Faixa)**, **CV% (Variabilidade)**, **GMI (HbA1c)** e médias por horário. |
+| **6** | **IA que Aprende Hábitos** | `ai_habit_insights` | Registro de padrões recorrentes (ex: pico por pizza, variação por dia). |
+| **7** | **Exercícios e Impacto Glicêmico** | `exercise_events` | Janela de sensibilidade de 12-24h com sugestão de redução de bolus. |
+| **8** | **Cadastro de Insulinas & Curvas** | `patient_insulins`, `insulin_profiles` | Farmacocinética (DIA, Pico, Onset) por marca (Fiasp, Lispro, Lantus, Tresiba). |
+| **9** | **Integração com Sensores & Bombas** | `device_integrations` | Tokens e pontes OAuth2/API para Dexcom, LibreLink, Omnipod, Nightscout. |
+| **10**| **Alertas Inteligentes** | `alerts` | Gatilhos para hipoglicemia, estoque baixo de insulinas/tiras e desconexão. |
+| **11**| **Lista de Compras Automática** | `shopping_lists` | Geração automática de compras baseada nas refeições planejadas da semana. |
+| **12**| **Planejamento Alimentar** | `meal_plans` | Cardápios e dietas prescritos por nutricionistas/endócrinos vinculados. |
+| **13**| **Relatórios e PDF para Médicos** | `patient_glycemic_statistics` | Relatórios clínicos completos com TIR, GMI (HbA1c), CV% e gráficos consolidados. |
+| **14**| **Área do Médico / Endocrinologista**| `user_patient_permissions` (`DOCTOR`) | Acesso seguro do profissional aos gráficos, histórico e sugestão de ajustes. |
+| **15**| **Área da Família / Cuidadores** | `user_patient_permissions` (`GUARDIAN`) | Alertas push em tempo real para pais em episódios de hipoglicemia grave. |
+| **16**| **Metas e Gamificação** | `gamification_goals` | Conquistas clínicas (ex: 7 dias sem hipo, 90% TIR, streak de registros). |
+| **17**| **Refeições Favoritas (1-Toque)** | `meal_templates`, `favorite_foods` | Modelos pré-salvos pelo paciente com re-uso com apenas 1 clique. |
+| **18**| **Busca Ultra-Rápida de Alimentos** | `food_database` (`FULLTEXT INDEX`) | Pesquisa instantânea em 488 mil alimentos via `MATCH(name, brand)`. |
+| **19**| **Modo Offline & Sincronização** | `data/unified_foods_database.json` | Carga local de alimentos e sincronização delta do histórico ao reconectar. |
+| **20**| **Assistente IA Educacional** | `ai_chat_sessions` | Chat de apoio pedagógico ao paciente com avisos médicos obrigatórios. |
+| **21**| **🧪 Simulador de Bolus ("What-If")** | `bolus_simulations` | Simulação sem registro clínico: *"E se eu comer 80g e caminhar 30min?"*. |
+| **22**| **🧬 Gêmeo Digital (Digital Twin)** | `digital_twin_profiles` | Perfil metabólico preditivo por IA que aprende respostas individuais aos alimentos. |
 
 ---
 
-## Ordem de Execução das Migrations
+## 🛠️ Ordem de Execução das Migrações no MySQL
 
 ```bash
-mysql -u root -p nome_do_banco < migrations/001_create_users_and_patients.sql
-mysql -u root -p nome_do_banco < migrations/002_create_insulin_profiles.sql
-mysql -u root -p nome_do_banco < migrations/003_create_glucose_meals_bolus.sql
-mysql -u root -p nome_do_banco < migrations/004_create_exercise_alerts_audit_food.sql
-mysql -u root -p nome_do_banco < migrations/005_create_patient_full_profile.sql
+# 1. Usuários, Pacientes e IMC (Triggers)
+mysql -u root -p banco < database/migrations/001_create_users_and_patients.sql
 
-# Seeds (banco de alimentos)
-mysql -u root -p nome_do_banco < seeds/001_seed_food_database.sql
+# 2. Perfis de Cálculo de Insulina (ICR, ISF, Alvo)
+mysql -u root -p banco < database/migrations/002_create_insulin_profiles.sql
+
+# 3. Glicemia, Refeições e Bolus Imutável (SHA-256)
+mysql -u root -p banco < database/migrations/003_create_glucose_meals_bolus.sql
+
+# 4. Exercícios, Alertas, Auditoria e Refeições Salvas
+mysql -u root -p banco < database/migrations/004_create_exercise_alerts_audit_food.sql
+
+# 5. Perfil de Saúde Completo e Viais de Insulina
+mysql -u root -p banco < database/migrations/005_create_patient_full_profile.sql
+
+# 6. Índice Glicêmico, Alimentos Favoritos e Multi-Perfil (Médicos/Pais)
+mysql -u root -p banco < database/migrations/006_glycemic_favorites_multi_permissions.sql
+
+# 7. Recursos Avançados de IA, Sensores, Planos e Gamificação
+mysql -u root -p banco < database/migrations/007_ai_features_devices_plans.sql
+
+# 8. Módulo de Estatísticas Clínicas (TIR, CV%, HbA1c/GMI, Médias por Horário e Refeição)
+mysql -u root -p banco < database/migrations/008_glycemic_statistics_module.sql
+
+# 9. Módulo Simulador de Bolus ("What-If") e Gêmeo Digital (Digital Twin)
+psql -U xivia_user -d xivia -f database/migrations/009_bolus_simulator_digital_twin.sql
+
+# 10. Hardening Clínico de Produção (Versionamento, Particionamento, GIN Trigram & LGPD)
+psql -U xivia_user -d xivia -f database/migrations/010_production_grade_clinical_hardening.sql
+
+# 11. Carga dos 488 Mil Alimentos Unificados
+psql -U xivia_user -d xivia -f database/seeds/001_seed_unified_foods.sql
 ```
-
----
-
-## Resumo das Tabelas
-
-| # | Tabela | Preenchido por | O que é |
-|---|--------|---------------|---------|
-| 1 | `users` | Sistema | Login e senha |
-| 2 | `patients` | Você | Nome, peso, altura, tipo de DM, dispositivo |
-| 3 | `patient_insulins` | Você | Insulinas que você toma (basal e bolus) |
-| 4 | `patient_medications` | Você | Outros remédios e suplementos |
-| 5 | `patient_health_metrics` | Você | Exames: HbA1c, pressão, colesterol, peso |
-| 6 | `patient_comorbidities` | Você | Outras condições de saúde |
-| 7 | `insulin_profiles` | Você | Seus parâmetros de cálculo (da prescrição) |
-| 8 | `insulin_profile_segments` | Você | ICR + ISF + Alvo por horário do dia |
-| 9 | `glucose_readings` | CGM/App | Leituras de glicemia |
-| 10 | `meals` | Você | Refeições registradas |
-| 11 | `bolus_events` | App | Histórico de cálculos de dose |
-| 12 | `exercise_events` | Você | Atividades físicas |
-| 13 | `alerts` | App | Avisos automáticos (hipo, hiper, etc.) |
-| 14 | `audit_log` | App | Histórico de alterações |
-| 15 | `food_database` | App/Admin | Banco de alimentos TACO + USDA |
-| 16 | `meal_templates` | Você | Refeições favoritas salvas |
-
-
-
-```
-users ──────────────────────────────────────────────────────────────────────────
-  │ 1
-  │
-  └──── N patients  (dados físicos: peso, altura, IMC automático, tipo DM)
-            │ 1
-            │
-            ├──── N patient_insulins          ← Insulinas em uso (basal, bolus)
-            │
-            ├──── N patient_medications       ← Outros medicamentos (oral, injetável)
-            │
-            ├──── N patient_health_metrics    ← HbA1c, pressão, colesterol, peso
-            │
-            ├──── N patient_comorbidities     ← Hipertensão, nefropatia, etc.
-            │
-            ├──── N patient_doctors           ← Médicos vinculados + permissões
-            │
-            ├──── N insulin_profiles          ← Perfil ativo de cálculo
-            │         │ 1
-            │         └──── N insulin_profile_segments
-            │                   (ICR + ISF + Alvo por horário — MÉDICO)
-            │
-            ├──── N glucose_readings          ← CGM / capilar (série temporal)
-            │
-            ├──── N meals                     ← Refeições + macros + FPU
-            │         └──── N bolus_events    ← Cálculos + doses + snapshot auditoria
-            │
-            ├──── N exercise_events           ← Atividades físicas + janela ISF
-            │
-            ├──── N alerts                    ← INFO / WARNING / CRITICAL
-            │
-            └──── N meal_templates            ← Refeições favoritas
-
-food_database (global — não vinculada a paciente)
-audit_log     (global — registra toda alteração clínica)
-```
-
----
-
-## Mapa de Responsabilidade: Quem preenche o quê?
-
-```
-┌─────────────────────────────────────┬─────────────────────────────────────────┐
-│  PACIENTE preenche                  │  MÉDICO (endocrinologista) define        │
-├─────────────────────────────────────┼─────────────────────────────────────────┤
-│  • Nome, data de nascimento         │  • ICR (Relação Insulina:Carb)           │
-│  • Peso, altura (IMC automático)    │  • ISF (Fator de Sensibilidade)          │
-│  • Tipo de diabetes                 │  • Glicemia Alvo por período             │
-│  • Medicamentos que toma            │  • DIA (Duração da Ação da Insulina)     │
-│  • Insulinas que usa                │  • Dose máxima por bolus                 │
-│  • Comorbidades conhecidas          │  • Limiar de hipoglicemia                │
-│  • Médicos vinculados               │  • Taxa basal (para bombas)              │
-│  • Alergias, histórico clínico      │  • Qualquer parâmetro de cálculo         │
-│  • Refeições e glicemias            │                                          │
-│  • Exercícios                       │  ⚠️ O sistema NUNCA altera esses         │
-│                                     │     parâmetros automaticamente           │
-└─────────────────────────────────────┴─────────────────────────────────────────┘
-```
-
----
-
-## Ordem de Execução das Migrations
-
-```bash
-mysql -u root -p nome_do_banco < migrations/001_create_users_and_patients.sql
-mysql -u root -p nome_do_banco < migrations/002_create_insulin_profiles.sql
-mysql -u root -p nome_do_banco < migrations/003_create_glucose_meals_bolus.sql
-mysql -u root -p nome_do_banco < migrations/004_create_exercise_alerts_audit_food.sql
-mysql -u root -p nome_do_banco < migrations/005_create_patient_full_profile.sql
-
-# Seeds (desenvolvimento)
-mysql -u root -p nome_do_banco < seeds/001_seed_food_database.sql
-```
-
----
-
-## Resumo das Tabelas
-
-| # | Tabela | Migration | Preenchido por | Descrição |
-|---|--------|-----------|---------------|-----------|
-| 1 | `users` | 001 | Sistema | Autenticação e controle de acesso |
-| 2 | `patients` | 001+005 | Paciente | Dados pessoais e clínicos básicos |
-| 3 | **`patient_insulins`** | 005 | Paciente | Insulinas em uso (basal, bolus, tipo, device) |
-| 4 | **`patient_medications`** | 005 | Paciente | Medicamentos (orais, injetáveis, suplementos) |
-| 5 | **`patient_health_metrics`** | 005 | Paciente/Lab | HbA1c, pressão, colesterol, peso, cetonas |
-| 6 | **`patient_comorbidities`** | 005 | Paciente | Hipertensão, nefropatia, gastroparesia, etc. |
-| 7 | **`patient_doctors`** | 005 | Paciente | Médicos vinculados + permissões de acesso |
-| 8 | `insulin_profiles` | 002 | **Médico** | Perfil ativo de insulina (DIA, tipo, device) |
-| 9 | `insulin_profile_segments` | 002 | **Médico** | **ICR + ISF + Alvo por horário** |
-| 10 | `glucose_readings` | 003 | CGM/Dispositivo | Série temporal de glicemia |
-| 11 | `meals` | 003 | Paciente | Refeições com macros e FPU |
-| 12 | `bolus_events` | 003 | Sistema | Cálculos + snapshot imutável (IEC 62304) |
-| 13 | `exercise_events` | 004 | Paciente | Atividades físicas e janela de sensibilidade |
-| 14 | `alerts` | 004 | Sistema | Alertas clínicos INFO/WARNING/CRITICAL |
-| 15 | `audit_log` | 004 | Sistema | Trilha imutável APPEND-ONLY |
-| 16 | `food_database` | 004 | Sistema/Admin | TACO + USDA (macros, IG, FPU) |
-| 17 | `meal_templates` | 004 | Paciente | Refeições favoritas pré-definidas |
-
----
-
-## Segurança e Conformidade
-
-### Dados Sensíveis (LGPD Art. 11)
-- `patients.first_name`, `last_name`, `date_of_birth` — **criptografar em repouso** (AES-256 na camada de aplicação antes do INSERT)
-- `users.email` — hash para busca + versão criptografada
-- `users.two_factor_secret` — AES-256 obrigatório
-
-### Soft Delete
-- `users.deleted_at` e `patients.deleted_at` — nunca deletar hard
-- Ao exportar/anonimizar: substituir dados pessoais por tokens irreversíveis
-
-### Tabelas Imutáveis (APPEND-ONLY)
-- `bolus_events` — **nunca UPDATE ou DELETE**
-- `audit_log` — **nunca UPDATE ou DELETE**
-
-### Constraints de Segurança Clínica (CHECK)
-- `insulin_profile_segments.icr` → BETWEEN 2.0 AND 100.0 g/U
-- `insulin_profile_segments.isf` → BETWEEN 5.0 AND 200.0 mg/dL/U
-- `insulin_profile_segments.target_glucose` → BETWEEN 70.0 AND 200.0 mg/dL
-- `insulin_profiles.dia_hours` → BETWEEN 2.0 AND 8.0 horas
-- `insulin_profiles.max_single_dose` → BETWEEN 0.05 AND 25.0 U
-- `bolus_events.iob_at_time` → >= 0.0 (IOB nunca negativo)
-- `glucose_readings.glucose_value` → BETWEEN 20.0 AND 700.0 mg/dL
-
----
-
-## Views (pasta /views)
-
-Criar posteriormente:
-
-- `v_patient_active_profile` — perfil ativo atual com segmento horário vigente
-- `v_iob_history` — bolus entregues nas últimas 8h para cálculo de IOB
-- `v_glucose_last_24h` — leituras de glicemia das últimas 24h por paciente
-- `v_time_in_range` — TIR calculado por período (semanal/mensal)
-- `v_daily_bolus_summary` — resumo diário de doses e correções

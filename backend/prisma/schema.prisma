@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PATIENT
+  DOCTOR
+  GUARDIAN
+}
+
+enum ExerciseType {
+  NONE
+  WALK_30
+  RUN_30
+  INTENSE_60
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  role          Role      @default(PATIENT)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  patientProfile Patient?
+}
+
+model Patient {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  weightKg            Float?
+  heightCm            Float?
+  targetGlucose       Int      @default(100)
+  hypoThreshold       Int      @default(70)
+  hyperThreshold      Int      @default(180)
+  diaHours            Float    @default(4.0)
+  roundingStep        Float    @default(0.5)
+
+  insulinProfiles     InsulinProfile[]
+  glucoseReadings     GlucoseReading[]
+  meals               Meal[]
+  bolusEvents         BolusEvent[]
+  auditLogs           AuditLog[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model InsulinProfile {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name        String   // Ex: Café da Manhã, Almoço, Jantar, Madrugada
+  startHour   Int      // 0 a 23
+  icr         Float    // Gramas de Carboidrato por Unidade de Insulina
+  isf         Float    // mg/dL reduzidos por Unidade de Insulina
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model GlucoseReading {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  glucoseMgDl Int
+  trend       String?  // Ex: FLAT, RISING, FALLING
+  source      String   @default("MANUAL") // CGM ou MANUAL
+  timestamp   DateTime @default(now())
+}
+
+model Meal {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  name        String
+  carbsGrams  Float
+  fpuFatGrams Float?   @default(0)
+  fpuProtGrams Float?  @default(0)
+  timestamp   DateTime @default(now())
+}
+
+model BolusEvent {
+  id                String       @id @default(uuid())
+  patientId         String
+  patient           Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  glucoseMgDl       Int
+  carbsGrams        Float
+  iobUsed           Float
+  recommendedDose   Float
+  rawTotal          Float
+  foodBolus         Float
+  corrBolus         Float
+  iobDiscount       Float
+  exerciseDiscount  Float
+  exercise          ExerciseType @default(NONE)
+  auditHash         String       // Snapshot SHA-256 de imutabilidade médica
+  timestamp         DateTime     @default(now())
+}
+
+model Food {
+  id                 String   @id @default(uuid())
+  code               String?  @unique
+  name               String
+  brand              String?
+  group              String?
+  portionDescription String   @default("100g")
+  carbsGrams         Float
+  proteinGrams       Float?   @default(0)
+  fatGrams           Float?   @default(0)
+  energyKcal         Float?   @default(0)
+  source             String   @default("TBCA_USP")
+
+  @@index([name])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  patientId   String
+  patient     Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  action      String
+  details     Json
+  ipAddress   String?
+  timestamp   DateTime @default(now())
+}

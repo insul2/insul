@@ -1,0 +1,16 @@
+{
+  "short_name": "LEBEN",
+  "name": "LEBEN — Viva Mais. Preocupe-se Menos. (Gestão do Diabetes)",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#f8fafc",
+  "theme_color": "#0ea5e9",
+  "display": "standalone",
+  "orientation": "portrait"
+}

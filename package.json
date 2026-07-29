@@ -1,17 +1,15 @@
 {
-  "name": "projetoinsu",
-  "version": "1.0.0",
-  "description": "Calculadora Inteligente de Dose de Insulina",
-  "main": "server.js",
+  "name": "leben-app",
+  "version": "4.0.0",
+  "description": "LEBEN — Plataforma de Gestão de Diabetes & Motor Clínico de Bolus",
+  "main": "backend/src/server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
-  },
-  "dependencies": {
-    "express": "^4.19.2"
+    "build": "cd backend && npm install && cd ../frontend && npm install && npm run build",
+    "start": "cd backend && npm start",
+    "test": "node tests/test_engine.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "LEBEN Engineering",
   "license": "ISC"
 }
