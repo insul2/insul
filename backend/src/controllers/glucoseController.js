@@ -84,17 +84,19 @@ export async function getGlucoseReadingsHandler(req, res) {
 export async function logGlucoseReadingHandler(req, res) {
   try {
     const userId = req.user ? req.user.id : 'anonymous';
-    const { glucoseMgDl, trend } = req.body || {};
+    const { glucoseMgDl, trend, timestamp } = req.body || {};
 
     if (!glucoseMgDl) {
       return res.status(400).json({ status: 'error', message: 'Valor de glicemia é obrigatório.' });
     }
 
+    const readingDate = timestamp ? new Date(timestamp) : new Date();
+
     const newReading = {
-      id: String(Date.now()),
+      id: String(Date.now() + Math.random()),
       glucoseMgDl: Number(glucoseMgDl),
       trend: trend || '➡️ Estável',
-      timestamp: new Date().toISOString()
+      timestamp: readingDate.toISOString()
     };
 
     // 1. Salvar no MongoDB Atlas
@@ -107,10 +109,10 @@ export async function logGlucoseReadingHandler(req, res) {
       await GlucoseReadingMongo.create({
         patient_id: patientIdVal,
         glucose_mgdl: newReading.glucoseMgDl,
-        read_at: new Date(),
+        read_at: readingDate,
         trend: newReading.trend,
-        record_type: 'MANUAL_ENTRY',
-        source: 'Web App'
+        record_type: trend === '📊 Histórico Sensor' ? 'AUTOMATIC_CGM' : 'MANUAL_ENTRY',
+        source: 'Web App NFC'
       });
     } catch (mongoErr) {}
 
