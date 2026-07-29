@@ -24,14 +24,31 @@ export default function BolusCalculatorPage() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [glucose, setGlucose] = useState(() => {
-    const savedReadings = localStorage.getItem('leben_glucose_readings');
-    if (savedReadings) {
-      const parsed = JSON.parse(savedReadings);
-      if (parsed.length > 0) return parsed[0].glucoseMgDl || 140;
-    }
-    return 140;
-  });
+  const [glucose, setGlucose] = useState(140);
+
+  useEffect(() => {
+    const fetchLatestGlucose = async () => {
+      try {
+        const token = localStorage.getItem('leben_token');
+        const res = await fetch('/api/v1/glucose', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const json = await res.json();
+        if (json.status === 'success' && json.data && json.data.length > 0) {
+          setGlucose(json.data[0].glucoseMgDl || 140);
+          return;
+        }
+      } catch (e) {}
+
+      const savedReadings = localStorage.getItem('leben_glucose_readings');
+      if (savedReadings) {
+        const parsed = JSON.parse(savedReadings);
+        if (parsed.length > 0) setGlucose(parsed[0].glucoseMgDl || 140);
+      }
+    };
+
+    fetchLatestGlucose();
+  }, []);
 
   const initialCarbs = searchParams.get('carbs') || '45';
   const [carbs, setCarbs] = useState(initialCarbs);

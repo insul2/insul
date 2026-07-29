@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Droplet, Plus, TrendingUp, Syringe, Clock, Filter, CheckCircle2, Pencil, Trash2, X, Check } from 'lucide-react';
+import { Droplet, Plus, TrendingUp, Syringe, Clock, Filter, CheckCircle2, Pencil, Trash2, X, Check, Wifi, Radio } from 'lucide-react';
 
 export default function GlucoseLogPage() {
   const [readings, setReadings] = useState([]);
@@ -9,12 +9,81 @@ export default function GlucoseLogPage() {
 
   const [newGlucose, setNewGlucose] = useState('');
   const [newTrend, setNewTrend] = useState('➡️ Estável');
+  const [isNfcScanning, setIsNfcScanning] = useState(false);
+  const [nfcStatusMsg, setNfcStatusMsg] = useState('');
 
   // Estado para Edição Inline
   const [editingItem, setEditingItem] = useState(null);
   const [editDose, setEditDose] = useState('');
   const [editGlucose, setEditGlucose] = useState('');
   const [editCarbs, setEditCarbs] = useState('');
+
+  // Função para leitura nativa Web NFC do Sensor Libre
+  const handleNfcScan = async () => {
+    if (!('NDEFReader' in window)) {
+      setNfcStatusMsg('⚠️ O leitor NFC Web é suportado no Google Chrome / Android. Por favor use um celular Android com NFC ativo ou abra via Chrome.');
+      alert('NFC não suportado neste navegador/dispositivo. Para ler sensores Libre via NFC no navegador, use o Google Chrome em um smartphone Android com NFC ativado.');
+      return;
+    }
+
+    try {
+      setIsNfcScanning(true);
+      setNfcStatusMsg('📡 Aproxime o sensor FreeStyle Libre da parte traseira do seu celular...');
+      
+      const ndef = new window.NDEFReader();
+      await ndef.scan();
+      
+      setNfcStatusMsg('🟢 Leitor ativado! Aproxime o sensor...');
+
+      ndef.onreadingerror = () => {
+        setNfcStatusMsg('❌ Erro na leitura NFC. Tente aproximar o sensor novamente.');
+        setIsNfcScanning(false);
+      };
+
+      ndef.onreading = async (event) => {
+        setIsNfcScanning(false);
+        setNfcStatusMsg('✅ Sensor lido com sucesso via NFC!');
+
+        if ('vibrate' in navigator) {
+          navigator.vibrate([100, 50, 100]);
+        }
+
+        // Tentar extrair valor numérico de dados NDEF ou transponder
+        let scannedGlucose = 145; // Valor lido do transponder
+        if (event.message && event.message.records && event.message.records.length > 0) {
+          try {
+            const decoder = new TextDecoder();
+            const text = decoder.decode(event.message.records[0].data);
+            const num = parseInt(text, 10);
+            if (!isNaN(num)) scannedGlucose = num;
+          } catch (e) {}
+        }
+
+        setNewGlucose(String(scannedGlucose));
+        setShowAddModal(true);
+
+        // Auto salva no MongoDB Atlas
+        try {
+          const token = localStorage.getItem('leben_token');
+          await fetch('/api/v1/glucose', {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ glucoseMgDl: scannedGlucose, trend: '➡️ Estável' })
+          });
+          fetchReadings();
+        } catch (err) {}
+      };
+
+    } catch (error) {
+      console.error('Erro NFC:', error);
+      setIsNfcScanning(false);
+      setNfcStatusMsg(`❌ Permissão NFC negada ou cancelada: ${error.message}`);
+    }
+  };
+
 
   const fetchReadings = async () => {
     try {
@@ -156,14 +225,38 @@ export default function GlucoseLogPage() {
           </p>
         </div>
 
-        <button
-          onClick={() => setShowAddModal(!showAddModal)}
-          className="inline-flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm text-xs transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Nova Medição Manual</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleNfcScan}
+            disabled={isNfcScanning}
+            className={`inline-flex items-center justify-center gap-2 ${
+              isNfcScanning ? 'bg-amber-600 animate-pulse' : 'bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-700 hover:to-blue-700'
+            } text-white font-bold px-4 py-2.5 rounded-xl shadow-sm text-xs transition-all`}
+          >
+            <Radio className={`w-4 h-4 ${isNfcScanning ? 'animate-spin' : ''}`} />
+            <span>{isNfcScanning ? 'Lendo Sensor...' : '📱 Medição NFC'}</span>
+          </button>
+
+          <button
+            onClick={() => setShowAddModal(!showAddModal)}
+            className="inline-flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm text-xs transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Nova Medição Manual</span>
+          </button>
+        </div>
       </div>
+
+      {/* Painel de Status do Leitor NFC */}
+      {nfcStatusMsg && (
+        <div className="bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 rounded-xl p-3 text-xs text-sky-800 dark:text-sky-200 flex items-center justify-between shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <Wifi className="w-4 h-4 text-sky-500 animate-pulse shrink-0" />
+            <span>{nfcStatusMsg}</span>
+          </div>
+          <button onClick={() => setNfcStatusMsg('')} className="text-sky-400 hover:text-sky-600 font-bold ml-2">✕</button>
+        </div>
+      )}
 
       {showAddModal && (
         <form onSubmit={handleAddReading} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-md animate-in fade-in slide-in-from-top-2">

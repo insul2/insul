@@ -14,17 +14,30 @@ export default function DashboardPage() {
   const [lastBolusInfo, setLastBolusInfo] = useState(null);
 
   useEffect(() => {
-    // Carregar leituras e doses registradas pelo usuário
-    const savedReadings = localStorage.getItem('leben_glucose_readings');
+    const fetchApiReadings = async () => {
+      try {
+        const token = localStorage.getItem('leben_token');
+        const res = await fetch('/api/v1/glucose', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const json = await res.json();
+        if (json.status === 'success' && json.data && json.data.length > 0) {
+          setGlucoseReadings(json.data);
+          return;
+        }
+      } catch (e) {}
+
+      const savedReadings = localStorage.getItem('leben_glucose_readings');
+      const readings = savedReadings ? JSON.parse(savedReadings) : [];
+      setGlucoseReadings(readings);
+    };
+
+    fetchApiReadings();
+
     const savedBolus = localStorage.getItem('leben_bolus_history');
-
-    const readings = savedReadings ? JSON.parse(savedReadings) : [];
     const bolus = savedBolus ? JSON.parse(savedBolus) : [];
-
-    setGlucoseReadings(readings);
     setBolusHistory(bolus);
 
-    // Calcular IOB dinâmico real
     if (bolus.length > 0) {
       const iobResult = computeAutoIOB(bolus, 'HUMALOG');
       setActiveIob(iobResult.totalIOB);

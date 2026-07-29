@@ -5,11 +5,12 @@
 
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
 import { config } from '../config/env.js';
 import { query } from '../config/database.js';
 
 // Repositório em cache RAM para fallback e alta performance
-const registeredUsersCache = new Map();
+export const registeredUsersCache = new Map();
 
 // Usuário padrão de demonstração pré-cadastrado com hash seguro
 const demoPasswordHash = bcrypt.hashSync('senha123', 10);
@@ -37,25 +38,52 @@ export async function loginHandler(req, res) {
     const cleanEmail = email.toLowerCase().trim();
     let user = null;
 
-    // 1. Tentar buscar no PostgreSQL oficial
+    // 1. Tentar buscar no MongoDB Atlas / Mongoose primeiro
     try {
-      const dbRes = await query('SELECT * FROM users WHERE LOWER(email) = $1 LIMIT 1', [cleanEmail]);
-      if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
-        const row = dbRes.rows[0];
+      if (mongoose.connection.readyState !== 1) {
+        await mongoose.connect(config.mongoUri, { serverSelectionTimeoutMS: 5000 });
+      }
+      const userSchema = new mongoose.Schema({
+        email: String,
+        password_hash: String,
+        full_name: String,
+        role: String
+      });
+      const UserMongo = mongoose.models.User || mongoose.model('User', userSchema);
+      const mongoUser = await UserMongo.findOne({ email: cleanEmail });
+      if (mongoUser) {
         user = {
-          id: row.id,
-          name: row.name,
-          email: row.email,
-          passwordHash: row.password_hash,
-          role: row.role || 'PATIENT',
-          diabetesType: row.diabetes_type || 'TYPE_1'
+          id: mongoUser._id.toString(),
+          name: mongoUser.full_name,
+          email: mongoUser.email,
+          passwordHash: mongoUser.password_hash,
+          role: mongoUser.role || 'PATIENT',
+          diabetesType: 'TYPE_1'
         };
       }
-    } catch (dbErr) {
-      // Fallback gracioso para cache em memória se DB estiver indisponível localmente
-      user = registeredUsersCache.get(cleanEmail);
+    } catch (mongoErr) {
+      console.error('⚠️ Mongoose Login Error:', mongoErr.message);
     }
 
+    // 2. Tentar buscar no PostgreSQL oficial se não achou no Mongo
+    if (!user) {
+      try {
+        const dbRes = await query('SELECT * FROM users WHERE LOWER(email) = $1 LIMIT 1', [cleanEmail]);
+        if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
+          const row = dbRes.rows[0];
+          user = {
+            id: row.id,
+            name: row.name,
+            email: row.email,
+            passwordHash: row.password_hash,
+            role: row.role || 'PATIENT',
+            diabetesType: row.diabetes_type || 'TYPE_1'
+          };
+        }
+      } catch (dbErr) {}
+    }
+
+    // 3. Fallback para o Cache RAM se necessário
     if (!user) {
       user = registeredUsersCache.get(cleanEmail);
     }

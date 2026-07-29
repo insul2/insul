@@ -6,19 +6,44 @@ export default function GlucoseChart24h() {
   const [userPoints, setUserPoints] = useState([]);
 
   useEffect(() => {
-    const savedReadings = localStorage.getItem('leben_glucose_readings');
-    const savedBolus = localStorage.getItem('leben_bolus_history');
+    const fetchApiReadings = async () => {
+      let readings = [];
+      try {
+        const token = localStorage.getItem('leben_token');
+        const res = await fetch('/api/v1/glucose', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const json = await res.json();
+        if (json.status === 'success' && json.data && json.data.length > 0) {
+          readings = json.data;
+        }
+      } catch (e) {}
 
-    const readings = savedReadings ? JSON.parse(savedReadings) : [];
-    const bolus = savedBolus ? JSON.parse(savedBolus) : [];
+      if (readings.length === 0) {
+        const savedReadings = localStorage.getItem('leben_glucose_readings');
+        readings = savedReadings ? JSON.parse(savedReadings) : [];
+      }
 
-    // Combinar medições para formar os pontos do gráfico
-    const combined = [
-      ...readings.map(r => ({ time: new Date(r.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), bg: r.glucoseMgDl, note: r.trend || 'Medição' })),
-      ...bolus.map(b => ({ time: new Date(b.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }), bg: b.glucose, note: `💉 Bolus ${b.dose}U (${b.carbs}g carbo)` }))
-    ];
+      const savedBolus = localStorage.getItem('leben_bolus_history');
+      const bolus = savedBolus ? JSON.parse(savedBolus) : [];
 
-    setUserPoints(combined);
+      const combined = [
+        ...readings.map(r => ({
+          time: new Date(r.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          bg: r.glucoseMgDl,
+          note: r.trend || 'Medição'
+        })),
+        ...bolus.map(b => ({
+          time: new Date(b.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+          bg: b.glucose,
+          note: `💉 Bolus ${b.dose}U (${b.carbs}g carbo)`
+        }))
+      ];
+
+      setUserPoints(combined);
+    };
+
+    fetchApiReadings();
   }, []);
 
   if (userPoints.length === 0) {
