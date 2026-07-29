@@ -48,50 +48,68 @@ export default function GlucoseLogPage() {
           navigator.vibrate([100, 50, 100]);
         }
 
-        let scannedGlucose = 145;
+        let scannedGlucose = 0;
         let batchReadings = [];
 
         // Decodificação do Buffer de Memória do FreeStyle Libre (ISO 15693 / Transponder / NDEF)
         if (event.message && event.message.records && event.message.records.length > 0) {
           try {
-            const record = event.message.records[0];
-            const buffer = new Uint8Array(record.data.buffer);
+            for (const record of event.message.records) {
+              const buffer = new Uint8Array(record.data.buffer);
 
-            // 1. Leitura Instantânea (Minuto Atual - Offset 0x1C/0x1D)
-            if (buffer.length >= 320) {
-              const currentRaw = ((buffer[29] & 0x0f) << 8) | (buffer[28] & 0xff);
-              if (currentRaw > 0) scannedGlucose = Math.round(currentRaw / 10);
+              // Tentar interpretar se for Payload NDEF em formato Texto/JSON
+              const text = new TextDecoder().decode(record.data);
+              const matchedNum = text.match(/\b([4-9]\d|[1-4]\d\d|500)\b/);
+              if (matchedNum) {
+                scannedGlucose = parseInt(matchedNum[1], 10);
+              }
 
-              // 2. Extração do Histórico das Últimas 8 Horas (32 blocos de 6 bytes cada)
-              const historicalIndex = buffer[27]; // Índice circular de gravação do sensor (0-31)
-              const historyStartByte = 124; // Bloco inicial do histórico contínuo
+              // Se o buffer for um RAM dump do transponder (320 bytes ou superior)
+              if (buffer.length >= 320) {
+                // Leitura do cabeçalho da RAM do Libre
+                const rawCurrent = ((buffer[29] & 0x0e) << 8) | (buffer[28] & 0xff);
+                const currentGlucoseCalculated = Math.round(rawCurrent / 10);
+                if (currentGlucoseCalculated >= 40 && currentGlucoseCalculated <= 500) {
+                  scannedGlucose = currentGlucoseCalculated;
+                }
 
-              for (let i = 0; i < 32; i++) {
-                const idx = (historicalIndex - 1 - i + 32) % 32;
-                const offset = historyStartByte + (idx * 6);
-                
-                if (offset + 2 < buffer.length) {
-                  const rawVal = ((buffer[offset + 1] & 0x0f) << 8) | (buffer[offset] & 0xff);
-                  const glucoseMg = Math.round(rawVal / 10);
+                // Blocos de histórico (32 leituras de 15 min)
+                const historicalIndex = buffer[27];
+                const historyStartByte = 124;
+
+                for (let i = 0; i < 32; i++) {
+                  const idx = (historicalIndex - 1 - i + 32) % 32;
+                  const offset = historyStartByte + (idx * 6);
                   
-                  if (glucoseMg >= 40 && glucoseMg <= 500) {
-                    const timestamp = new Date(Date.now() - (i * 15 * 60 * 1000)).toISOString();
-                    batchReadings.push({
-                      glucoseMgDl: glucoseMg,
-                      trend: i === 0 ? '➡️ Estável' : '📊 Histórico Sensor',
-                      timestamp
-                    });
+                  if (offset + 1 < buffer.length) {
+                    const rawVal = ((buffer[offset + 1] & 0x0e) << 8) | (buffer[offset] & 0xff);
+                    const glucoseMg = Math.round(rawVal / 10);
+                    
+                    if (glucoseMg >= 40 && glucoseMg <= 500) {
+                      batchReadings.push({
+                        glucoseMgDl: glucoseMg,
+                        trend: i === 0 ? '➡️ Estável' : '📊 Histórico Sensor',
+                        timestamp: new Date(Date.now() - (i * 15 * 60 * 1000)).toISOString()
+                      });
+                    }
                   }
                 }
               }
-            } else {
-              const text = new TextDecoder().decode(record.data);
-              const num = parseInt(text, 10);
-              if (!isNaN(num)) scannedGlucose = num;
             }
           } catch (e) {
-            console.warn('Fallback decodificador de memória Libre:', e);
+            console.warn('Erro ao decodificar frame do sensor Libre:', e);
           }
+        }
+
+        // Se o sensor foi lido mas não produziu um número válido, solicita ao usuário
+        if (!scannedGlucose && batchReadings.length === 0) {
+          const userInput = prompt('Sensor lido via NFC! Confirme ou digite o valor exibido no leitor (mg/dL):', '120');
+          if (userInput) scannedGlucose = parseInt(userInput, 10);
+        }
+
+        if (scannedGlucose > 0) {
+          setNewGlucose(String(scannedGlucose));
+          setShowAddModal(true);
         }
 
         // Se não conseguiu montar o lote por limitações do SO/NFC do dispositivo, cria o ponto atual + pontos históricos de tendência

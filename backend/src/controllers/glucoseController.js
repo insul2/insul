@@ -21,14 +21,20 @@ export async function getGlucoseReadingsHandler(req, res) {
         await mongoose.connect(config.mongoUri, { serverSelectionTimeoutMS: 5000 });
       }
       const GlucoseReadingMongo = mongoose.models.GlucoseReading || mongoose.model('GlucoseReading', new mongoose.Schema({
-        patient_id: mongoose.Schema.Types.ObjectId,
+        patient_id: mongoose.Schema.Types.Mixed,
         glucose_mgdl: Number,
         read_at: Date,
         trend: String,
         record_type: String
       }));
 
-      const docs = await GlucoseReadingMongo.find({ patient_id: userId }).sort({ read_at: -1 }).limit(100);
+      // Busca por ObjectId ou por String (ex: Pedro Mongo _id ou usr_123)
+      let queryFilter = { patient_id: userId };
+      if (mongoose.Types.ObjectId.isValid(userId)) {
+        queryFilter = { $or: [{ patient_id: new mongoose.Types.ObjectId(userId) }, { patient_id: userId }] };
+      }
+
+      const docs = await GlucoseReadingMongo.find(queryFilter).sort({ read_at: -1 }).limit(100);
       if (docs && docs.length > 0) {
         readings = docs.map(d => ({
           id: d._id.toString(),
@@ -97,16 +103,15 @@ export async function logGlucoseReadingHandler(req, res) {
         await mongoose.connect(config.mongoUri, { serverSelectionTimeoutMS: 5000 });
       }
       const GlucoseReadingMongo = mongoose.models.GlucoseReading || mongoose.model('GlucoseReading');
-      if (mongoose.Types.ObjectId.isValid(userId)) {
-        await GlucoseReadingMongo.create({
-          patient_id: userId,
-          glucose_mgdl: newReading.glucoseMgDl,
-          read_at: new Date(),
-          trend: newReading.trend,
-          record_type: 'MANUAL_ENTRY',
-          source: 'Web App'
-        });
-      }
+      const patientIdVal = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
+      await GlucoseReadingMongo.create({
+        patient_id: patientIdVal,
+        glucose_mgdl: newReading.glucoseMgDl,
+        read_at: new Date(),
+        trend: newReading.trend,
+        record_type: 'MANUAL_ENTRY',
+        source: 'Web App'
+      });
     } catch (mongoErr) {}
 
     // 2. Tentar salvar no PostgreSQL se disponível
