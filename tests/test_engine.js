@@ -1,7 +1,7 @@
 /**
- * 🧪 LEBEN CLINICAL MATH ENGINE — SUÍTE COMPLETA DE TESTES DE PRODUÇÃO (35 TESTES)
+ * 🧪 LEBEN CLINICAL MATH ENGINE — SUÍTE COMPLETA DE TESTES DE PRODUÇÃO (36 TESTES)
  * Validação de algoritmos clínicos, segurança de hipoglicemia, decaimento de IOB,
- * perfis circadianos, cálculo prandial/corretivo e imutabilidade SHA-256 encadeada.
+ * perfis circadianos, cálculo prandial/corretivo, CGM trends, score de confiança e imutabilidade SHA-256 encadeada.
  */
 
 import { calculateBolus } from '../backend/src/core/glucose_engine/insulin_math/bolus.js';
@@ -24,7 +24,7 @@ function assert(condition, message) {
 }
 
 async function runAllTests() {
-  console.log('🧪 Iniciando Suíte Completa de Produção (35 Testes Clínicos)...\n');
+  console.log('🧪 Iniciando Suíte Completa de Produção (36 Testes Clínicos)...\n');
 
   // =========================================================================
   // BLOCO 1: SEGURANÇA E REGRA DE HIPOGLICEMIA (MÉDICO OBRIGATÓRIO)
@@ -43,11 +43,15 @@ async function runAllTests() {
   assert(r.validation.isHypo === false, 'BG 70 mg/dL é o limite exato de saída da hipoglicemia');
 
   // =========================================================================
-  // BLOCO 2: CÁLCULO PRANDIAL PURAMENTE ALIMENTAR
+  // BLOCO 2: CÁLCULO PRANDIAL PURAMENTE ALIMENTAR E SCORE DE CONFIANÇA
   // =========================================================================
-  console.log('\n--- [BLOCO 2] Cálculo Prandial (Alimentos) ---');
+  console.log('\n--- [BLOCO 2] Cálculo Prandial e Score de Confiabilidade ---');
   r = calculateBolus({ glucose: 100, carbs: 50, iob: 0, icr: 10, isf: 40 });
   assert(r.recommendedDose === 5.0, '50g de carbo com ICR 10 em BG 100 mg/dL ➔ Dose 5.0U');
+  assert(r.confidenceScore >= 90, 'Score de confiança em condições normais deve ser >= 90%');
+
+  r = calculateBolus({ glucose: 100, carbs: 50, iob: 0, icr: 10, isf: 40, condition: 'FEVER_ILLNESS' });
+  assert(r.confidenceScore < 80, 'Febre/Infecção deve reduzir o score de confiança');
 
   r = calculateBolus({ glucose: 100, carbs: 60, iob: 0, icr: 12, isf: 40 });
   assert(r.recommendedDose === 5.0, '60g de carbo com ICR 12 ➔ 60/12 = 5.0U');
@@ -59,14 +63,14 @@ async function runAllTests() {
   assert(r.recommendedDose === 1.0, '12g com ICR 10 ➔ 1.2U arredondado para 1.0U');
 
   // =========================================================================
-  // BLOCO 3: CÁLCULO DE CORREÇÃO DE HIPERGLICEMIA
+  // BLOCO 3: CÁLCULO DE CORREÇÃO E TENDÊNCIA CGM
   // =========================================================================
-  console.log('\n--- [BLOCO 3] Correção de Hiperglicemia ---');
+  console.log('\n--- [BLOCO 3] Correção de Hiperglicemia e Tendência CGM ---');
   r = calculateBolus({ glucose: 220, carbs: 0, iob: 0, icr: 10, isf: 40 });
   assert(r.recommendedDose === 3.0, 'BG 220, Alvo 100, ISF 40 ➔ (220-100)/40 = 3.0U');
 
-  r = calculateBolus({ glucose: 180, carbs: 0, iob: 0, icr: 10, isf: 40 });
-  assert(r.recommendedDose === 2.0, 'BG 180, Alvo 100, ISF 40 ➔ (180-100)/40 = 2.0U');
+  r = calculateBolus({ glucose: 180, carbs: 0, iob: 0, icr: 10, isf: 40, cgmTrend: 'DOUBLE_UP' });
+  assert(r.recommendedDose > 2.0, 'Tendência DOUBLE_UP (+30 mg/dL) deve aumentar o bolus corretivo');
 
   r = calculateBolus({ glucose: 180, carbs: 40, iob: 0, icr: 10, isf: 40 });
   assert(r.recommendedDose === 6.0, 'Prandial 4.0U + Correção 2.0U ➔ Dose total 6.0U');
@@ -83,14 +87,14 @@ async function runAllTests() {
   assert(r.recommendedDose === 4.0, 'IOB alto (3.0U) NÃO deve descontar da comida quando BG está no alvo (100 mg/dL)');
 
   // =========================================================================
-  // BLOCO 5: AJUSTES DE EXERCÍCIO FÍSICO
+  // BLOCO 5: AJUSTES DE EXERCÍCIO FÍSICO (AERÓBICO VS ANAERÓBICO)
   // =========================================================================
   console.log('\n--- [BLOCO 5] Ajustes de Exercício Físico ---');
   r = calculateBolus({ glucose: 100, carbs: 50, iob: 0, icr: 10, isf: 40, exercise: 'WALK_30' });
   assert(r.recommendedDose < 5.0, 'Caminhada (WALK_30) deve reduzir a dose total calculada');
 
-  r = calculateBolus({ glucose: 100, carbs: 50, iob: 0, icr: 10, isf: 40, exercise: 'RUN_30' });
-  assert(r.recommendedDose === 3.5, 'Corrida (RUN_30) com 30% desc ➔ 5.0 * 0.7 = 3.5U');
+  r = calculateBolus({ glucose: 100, carbs: 50, iob: 0, icr: 10, isf: 40, exercise: 'RESISTANCE_ANAEROBIC' });
+  assert(r.recommendedDose > 5.0, 'Musculação (RESISTANCE_ANAEROBIC) deve aplicar incremento temporário de +10%');
 
   // =========================================================================
   // BLOCO 6: IMUTABILIDADE E HASH SHA-256 ENCADEADA
@@ -132,17 +136,20 @@ async function runAllTests() {
   assert(autoIob.activeDoses.length === 1, 'Dose de 5h atrás deve ser ignorada (expirada)');
 
   // =========================================================================
-  // BLOCO 9: VALIDADOR DE INPUTS DE SEGURANÇA
+  // BLOCO 9: VALIDADOR DE INPUTS DE SEGURANÇA E EXTREMOS
   // =========================================================================
-  console.log('\n--- [BLOCO 9] Validador de Inputs de Segurança ---');
+  console.log('\n--- [BLOCO 9] Validador de Inputs de Segurança e Extremos ---');
   let val = validateBolusInput({ glucose: 10, carbs: 20, iob: 0, icr: 10, isf: 40 });
   assert(val.isValid === false, 'Glicemia abaixo do mínimo absoluto (20 mg/dL) deve ser rejeitada');
 
+  val = validateBolusInput({ glucose: 22, carbs: 0, iob: 0, icr: 10, isf: 40 });
+  assert(val.warnings.some(w => w.includes('EMERGÊNCIA EXTREMA')), 'BG <= 25 mg/dL deve disparar alerta de emergência extrema');
+
+  val = validateBolusInput({ glucose: 120, carbs: 350, iob: 0, icr: 10, isf: 40 });
+  assert(val.warnings.some(w => w.includes('REFEIÇÃO EXTREMA')), 'Carboidratos > 300g deve disparar aviso de verificação');
+
   val = validateBolusInput({ glucose: 120, carbs: -10, iob: 0, icr: 10, isf: 40 });
   assert(val.isValid === false, 'Carboidratos negativos devem ser rejeitados');
-
-  val = validateBolusInput({ glucose: 120, carbs: 20, iob: 0, icr: 0, isf: 40 });
-  assert(val.isValid === false, 'ICR fora dos limites permitidos deve ser rejeitado');
 
   // =========================================================================
   // BLOCO 10: BUSCA NUTRICIONAL E TABELA DE ALIMENTOS

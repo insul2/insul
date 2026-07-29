@@ -1,12 +1,15 @@
 /**
  * 🌿 Motor de Validação e Regras de Segurança Clínica — LEBEN Engine V4.0
- * Padrão: ES Modules (ESM) — Conformidade IEC 62304 / SBD / ADA
+ * Padrão: ES Modules (ESM) — Conformidade IEC 62304 / SBD / ADA / ISO 14971
  */
 
 export const SAFETY_LIMITS = {
   MIN_GLUCOSE: 20,         // mg/dL mínimo absoluto
+  CRITICAL_LOW: 25,        // mg/dL emergência extrema
   HYPO_THRESHOLD: 70,      // mg/dL limite de hipoglicemia
   MAX_GLUCOSE: 600,        // mg/dL máximo razoável
+  MAX_CARBS_WARN: 300,     // g de carbo alerta para revisão
+  MAX_IOB_WARN: 40,        // U de IOB alerta para revisão
   MAX_BOLUS_SINGLE: 25,    // Limite automático de alerta para confirmação manual (25 U)
   MIN_ICR: 1,              // g/U
   MAX_ICR: 150,            // g/U
@@ -44,9 +47,18 @@ export function validateBolusInput(input) {
     errors.push(`Glicemia inválida (${input.glucose} mg/dL). Deve estar entre ${SAFETY_LIMITS.MIN_GLUCOSE} e ${SAFETY_LIMITS.MAX_GLUCOSE} mg/dL.`);
   }
 
-  const isHypo = bg < SAFETY_LIMITS.HYPO_THRESHOLD;
-  if (isHypo) {
+  if (bg <= SAFETY_LIMITS.CRITICAL_LOW) {
+    warnings.push(`🚨 EMERGÊNCIA EXTREMA: Glicemia em ${bg} mg/dL. Risco de perda de consciência. Acione ajuda médica e consuma carboidrato rápido imediatamente.`);
+  } else if (bg < SAFETY_LIMITS.HYPO_THRESHOLD) {
     warnings.push(`🛑 APLICAÇÃO BLOQUEADA TEMPORARIAMENTE: Hipoglicemia detectada (${bg} mg/dL). Tratar imediatamente com 15g de carboidrato rápido e recalcular após nova medição.`);
+  }
+
+  if (carbs > SAFETY_LIMITS.MAX_CARBS_WARN) {
+    warnings.push(`⚠️ ALERTA DE REFEIÇÃO EXTREMA: ${carbs}g de carboidratos excede 300g. Verifique a quantidade digitada.`);
+  }
+
+  if (iob > SAFETY_LIMITS.MAX_IOB_WARN) {
+    warnings.push(`⚠️ ALERTA DE IOB ELEVADO: Insulina Ativa em ${iob}U. Verifique se os dados estão corretos.`);
   }
 
   if (carbs < 0) {
@@ -59,7 +71,7 @@ export function validateBolusInput(input) {
 
   return {
     isValid: errors.length === 0,
-    isHypo,
+    isHypo: bg < SAFETY_LIMITS.HYPO_THRESHOLD,
     errors,
     warnings
   };
