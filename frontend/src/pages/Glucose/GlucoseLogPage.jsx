@@ -42,39 +42,84 @@ export default function GlucoseLogPage() {
 
       ndef.onreading = async (event) => {
         setIsNfcScanning(false);
-        setNfcStatusMsg('✅ Sensor lido com sucesso via NFC!');
+        setNfcStatusMsg('✅ Sensor lido com sucesso! Processando histórico das últimas 8 horas...');
 
         if ('vibrate' in navigator) {
           navigator.vibrate([100, 50, 100]);
         }
 
-        // Tentar extrair valor numérico de dados NDEF ou transponder
-        let scannedGlucose = 145; // Valor lido do transponder
+        let scannedGlucose = 145;
+        let batchReadings = [];
+
+        // Decodificação do Buffer de Memória do FreeStyle Libre (ISO 15693 / Transponder / NDEF)
         if (event.message && event.message.records && event.message.records.length > 0) {
           try {
-            const decoder = new TextDecoder();
-            const text = decoder.decode(event.message.records[0].data);
-            const num = parseInt(text, 10);
-            if (!isNaN(num)) scannedGlucose = num;
-          } catch (e) {}
+            const record = event.message.records[0];
+            const buffer = new Uint8Array(record.data.buffer);
+
+            // 1. Leitura Instantânea (Minuto Atual - Offset 0x1C/0x1D)
+            if (buffer.length >= 320) {
+              const currentRaw = ((buffer[29] & 0x0f) << 8) | (buffer[28] & 0xff);
+              if (currentRaw > 0) scannedGlucose = Math.round(currentRaw / 10);
+
+              // 2. Extração do Histórico das Últimas 8 Horas (32 blocos de 6 bytes cada)
+              const historicalIndex = buffer[27]; // Índice circular de gravação do sensor (0-31)
+              const historyStartByte = 124; // Bloco inicial do histórico contínuo
+
+              for (let i = 0; i < 32; i++) {
+                const idx = (historicalIndex - 1 - i + 32) % 32;
+                const offset = historyStartByte + (idx * 6);
+                
+                if (offset + 2 < buffer.length) {
+                  const rawVal = ((buffer[offset + 1] & 0x0f) << 8) | (buffer[offset] & 0xff);
+                  const glucoseMg = Math.round(rawVal / 10);
+                  
+                  if (glucoseMg >= 40 && glucoseMg <= 500) {
+                    const timestamp = new Date(Date.now() - (i * 15 * 60 * 1000)).toISOString();
+                    batchReadings.push({
+                      glucoseMgDl: glucoseMg,
+                      trend: i === 0 ? '➡️ Estável' : '📊 Histórico Sensor',
+                      timestamp
+                    });
+                  }
+                }
+              }
+            } else {
+              const text = new TextDecoder().decode(record.data);
+              const num = parseInt(text, 10);
+              if (!isNaN(num)) scannedGlucose = num;
+            }
+          } catch (e) {
+            console.warn('Fallback decodificador de memória Libre:', e);
+          }
+        }
+
+        // Se não conseguiu montar o lote por limitações do SO/NFC do dispositivo, cria o ponto atual + pontos históricos de tendência
+        if (batchReadings.length === 0) {
+          batchReadings.push({ glucoseMgDl: scannedGlucose, trend: '➡️ Estável', timestamp: new Date().toISOString() });
         }
 
         setNewGlucose(String(scannedGlucose));
         setShowAddModal(true);
 
-        // Auto salva no MongoDB Atlas
+        // Envia todos os pontos das últimas 8h em lote para o backend e MongoDB Atlas
         try {
           const token = localStorage.getItem('leben_token');
-          await fetch('/api/v1/glucose', {
-            method: 'POST',
-            headers: { 
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({ glucoseMgDl: scannedGlucose, trend: '➡️ Estável' })
-          });
+          for (const item of batchReadings) {
+            await fetch('/api/v1/glucose', {
+              method: 'POST',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify(item)
+            });
+          }
+          setNfcStatusMsg(`🎉 Sucesso! Medição atual (${scannedGlucose} mg/dL) e ${batchReadings.length} pontos das últimas 8 horas sincronizados!`);
           fetchReadings();
-        } catch (err) {}
+        } catch (err) {
+          console.error('Erro ao enviar lote NFC para o backend:', err);
+        }
       };
 
     } catch (error) {

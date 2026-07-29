@@ -180,9 +180,16 @@ export async function seedMongoDatabase() {
 
     // --- IMPORTAÇÃO DOS DADOS DO LIBREVIEW PARA A CONTA DO PEDRO ---
     console.log('📊 Importando dados do sensor LibreView para a conta do Pedro...');
-    const librePath = path.join(__dirname, '../../../Libreview2026-07-29-14_29_14.csv');
+    const candidatePaths = [
+      path.join(__dirname, '../../../Libreview2026-07-29-14_29_14.csv'),
+      path.join(process.cwd(), 'Libreview2026-07-29-14_29_14.csv'),
+      path.join(process.cwd(), '../Libreview2026-07-29-14_29_14.csv'),
+      path.join(process.cwd(), 'data/Libreview2026-07-29-14_29_14.csv')
+    ];
+
+    const librePath = candidatePaths.find(p => fs.existsSync(p));
     
-    if (fs.existsSync(librePath)) {
+    if (librePath) {
       const csvContent = fs.readFileSync(librePath, 'utf-8');
       const lines = csvContent.split('\n');
       const readings = [];
