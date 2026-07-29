@@ -44,8 +44,34 @@ export default function GlucoseLogPage() {
         setIsNfcScanning(false);
         setNfcStatusMsg('✅ Sensor lido com sucesso! Processando histórico das últimas 8 horas...');
 
+        // 1. Efeito Sonoro da Leitura do Sensor (Web Audio API Beep)
+        try {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            const ctx = new AudioContext();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(880, ctx.currentTime); // Tom A5 (Beep de confirmação médica)
+            osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.15); // Tom E6 ascendente de sucesso
+            
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+            
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            
+            osc.start();
+            osc.stop(ctx.currentTime + 0.15);
+          }
+        } catch (audioErr) {
+          console.warn('Áudio Web não suportado:', audioErr);
+        }
+
+        // 2. Vibração Tátil Dupla do Celular
         if ('vibrate' in navigator) {
-          navigator.vibrate([100, 50, 100]);
+          navigator.vibrate([120, 80, 160]);
         }
 
         let scannedGlucose = 0;

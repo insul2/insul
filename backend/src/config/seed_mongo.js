@@ -222,11 +222,12 @@ export async function seedMongoDatabase() {
         }
       }
 
-      if (readings.length > 0) {
-        // Limpa leituras anteriores de teste do Pedro para não duplicar
-        await GlucoseReading.deleteMany({ patient_id: pedroUser._id });
+      const existingReadingsCount = await GlucoseReading.countDocuments({ patient_id: pedroUser._id });
+      if (existingReadingsCount === 0 && readings.length > 0) {
         await GlucoseReading.insertMany(readings);
-        console.log(`✅ ${readings.length} medições de glicemia importadas para a conta do Pedro!`);
+        console.log(`✅ ${readings.length} medições de glicemia iniciais importadas para a conta do Pedro!`);
+      } else {
+        console.log(`ℹ️ Conta do Pedro já possui ${existingReadingsCount} leituras no MongoDB Atlas. Mantendo histórico live.`);
       }
     } else {
       console.error('⚠️ Arquivo Libreview2026-07-29-14_29_14.csv não encontrado.');
