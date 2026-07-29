@@ -2,8 +2,15 @@ import { GlucoseEngineService } from '../services/glucoseEngineService.js';
 
 export function calculateBolusHandler(req, res) {
   try {
-    const input = req.body || {};
-    const result = GlucoseEngineService.processBolusCalculation(input);
+    const rawInput = req.body || {};
+    const normalizedInput = {
+      ...rawInput,
+      glucose: rawInput.glucose ?? rawInput.currentGlucose,
+      carbs: rawInput.carbs ?? rawInput.carbsGrams,
+      targetGlucose: rawInput.targetGlucose ?? rawInput.target
+    };
+
+    const result = GlucoseEngineService.processBolusCalculation(normalizedInput);
 
     if (!result.success) {
       return res.status(400).json({
