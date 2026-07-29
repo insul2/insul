@@ -1,17 +1,25 @@
 /**
- * Motor de Validação e Regras de Segurança Clínica (Insul / Xivia)
- * Padrão: ES Modules (ESM)
+ * 🌿 Motor de Validação e Regras de Segurança Clínica — LEBEN Engine V4.0
+ * Padrão: ES Modules (ESM) — Conformidade IEC 62304 / SBD / ADA
  */
 
 export const SAFETY_LIMITS = {
-  MIN_GLUCOSE: 20,       // mg/dL mínimo absoluto para cálculo
-  HYPO_THRESHOLD: 70,    // mg/dL limite de hipoglicemia
-  MAX_GLUCOSE: 600,      // mg/dL máximo razoável
-  MAX_BOLUS_SINGLE: 25,  // Limite máximo de segurança por aplicação (25 Unidades)
-  MIN_ICR: 1,            // g/U menor ICR permitido
-  MAX_ICR: 150,          // g/U maior ICR permitido
-  MIN_ISF: 5,            // mg/dL/U menor ISF permitido
-  MAX_ISF: 300,          // mg/dL/U maior ISF permitido
+  MIN_GLUCOSE: 20,         // mg/dL mínimo absoluto
+  HYPO_THRESHOLD: 70,      // mg/dL limite de hipoglicemia
+  MAX_GLUCOSE: 600,        // mg/dL máximo razoável
+  MAX_BOLUS_SINGLE: 25,    // Limite automático de alerta para confirmação manual (25 U)
+  MIN_ICR: 1,              // g/U
+  MAX_ICR: 150,            // g/U
+  MIN_ISF: 5,              // mg/dL/U
+  MAX_ISF: 300,            // mg/dL/U
+};
+
+// Perfis Clínicos de Pacientes e Metas de Glicemia Alvo Recomendadas
+export const PATIENT_PROFILES = {
+  ADULT: { key: 'ADULT', label: 'Adulto Geral', targetGlucose: 100 },
+  PREGNANT: { key: 'PREGNANT', label: 'Gestante (Controle Estrito)', targetGlucose: 90 },
+  CHILD: { key: 'CHILD', label: 'Criança / Pediatria', targetGlucose: 120 },
+  ELDERLY: { key: 'ELDERLY', label: 'Idoso / Prevenção Hipo', targetGlucose: 140 }
 };
 
 export function validateBolusInput(input) {
@@ -38,7 +46,7 @@ export function validateBolusInput(input) {
 
   const isHypo = bg < SAFETY_LIMITS.HYPO_THRESHOLD;
   if (isHypo) {
-    warnings.push(`⚠️ HIPOGLICEMIA DETECTADA (${bg} mg/dL). Nenhuma dose de insulina deve ser aplicada. Consuma de 15g a 20g de carboidrato simples imediatamente.`);
+    warnings.push(`🛑 APLICAÇÃO BLOQUEADA TEMPORARIAMENTE: Hipoglicemia detectada (${bg} mg/dL). Tratar imediatamente com 15g de carboidrato rápido e recalcular após nova medição.`);
   }
 
   if (carbs < 0) {

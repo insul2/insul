@@ -1,22 +1,52 @@
 /**
- * Motor de Cálculo de Insulina Ativa (IOB — Insulin On Board)
- * Padrão: ES Modules (ESM)
+ * 🌿 Motor de Cálculo de Insulina Ativa (IOB — Insulin On Board)
+ * Padrão: ES Modules (ESM) — Curvas Específicas de Farmacocinética
  */
 
-export function calculateIOBFraction(timeElapsedMinutes, diaHours = 4.0) {
-  if (timeElapsedMinutes <= 0) return 1.0;
+// Curva Específica para Insulinas Ultrarrápidas Padrão (Humalog / Novorapid / Apidra - DIA 4h)
+function curveHumalog(t) {
+  if (t <= 0) return 1.0;
+  if (t >= 1.0) return 0.0;
+  return Math.max(0, 1 - (3.75 * Math.pow(t, 2)) + (4.25 * Math.pow(t, 3)) - (1.5 * Math.pow(t, 4)));
+}
 
+// Curva Específica para Insulinas Super-Ultrarrápidas (Fiasp / Lumjev - Pico Precoce - DIA 3h)
+function curveFiasp(t) {
+  if (t <= 0) return 1.0;
+  if (t >= 1.0) return 0.0;
+  // Pico de absorção acelerado nos primeiros 45min
+  return Math.max(0, 1 - (4.2 * Math.pow(t, 2)) + (4.8 * Math.pow(t, 3)) - (1.6 * Math.pow(t, 4)));
+}
+
+// Curva Específica para Insulina Humana Regular (DIA 6h)
+function curveRegular(t) {
+  if (t <= 0) return 1.0;
+  if (t >= 1.0) return 0.0;
+  return Math.max(0, 1 - (3.0 * Math.pow(t, 2)) + (3.2 * Math.pow(t, 3)) - (1.2 * Math.pow(t, 4)));
+}
+
+export function calculateIOBFraction(timeElapsedMinutes, insulinType = 'HUMALOG') {
+  const type = (insulinType || 'HUMALOG').toUpperCase();
+  let diaHours = 4.0;
+  let curveFn = curveHumalog;
+
+  if (type === 'FIASP' || type === 'LUMJEV') {
+    diaHours = 3.0;
+    curveFn = curveFiasp;
+  } else if (type === 'REGULAR') {
+    diaHours = 6.0;
+    curveFn = curveRegular;
+  }
+
+  if (timeElapsedMinutes <= 0) return 1.0;
   const diaMinutes = diaHours * 60;
   if (timeElapsedMinutes >= diaMinutes) return 0.0;
 
-  // Curva de decaimento de IOB baseada em aproximação polinomial de 4º grau validada
   const t = timeElapsedMinutes / diaMinutes;
-  const iobFraction = 1 - (3.75 * Math.pow(t, 2)) + (4.25 * Math.pow(t, 3)) - (1.5 * Math.pow(t, 4));
-
-  return Math.max(0, Math.min(1, iobFraction));
+  return Math.max(0, Math.min(1, curveFn(t)));
 }
 
-export function calculateRemainingIOB(doseDrawn, timeElapsedMinutes, diaHours = 4.0) {
-  const fraction = calculateIOBFraction(timeElapsedMinutes, diaHours);
+export function calculateRemainingIOB(doseDrawn, timeElapsedMinutes, insulinType = 'HUMALOG') {
+  const fraction = calculateIOBFraction(timeElapsedMinutes, insulinType);
   return Number((doseDrawn * fraction).toFixed(2));
 }
