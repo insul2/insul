@@ -14,9 +14,9 @@ export default function GlucoseLogPage() {
 
   // Estado para Modal LibreLinkUp (Abbott Cloud)
   const [showLibreModal, setShowLibreModal] = useState(false);
-  const [libreEmail, setLibreEmail] = useState('');
-  const [librePassword, setLibrePassword] = useState('');
-  const [libreRegion, setLibreRegion] = useState('us');
+  const [libreEmail, setLibreEmail] = useState(() => localStorage.getItem('leben_libre_email') || '');
+  const [librePassword, setLibrePassword] = useState(() => localStorage.getItem('leben_libre_password') || '');
+  const [libreRegion, setLibreRegion] = useState(() => localStorage.getItem('leben_libre_region') || 'la');
   const [libreLoading, setLibreLoading] = useState(false);
 
   // Estado para Edição Inline
@@ -270,12 +270,34 @@ export default function GlucoseLogPage() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowLibreModal(true)}
-            className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm text-xs transition-all"
-            title="Conectar com a nuvem do LibreLinkUp (Abbott)"
+            onClick={() => {
+              if (libreEmail && librePassword) {
+                // Se já possui credenciais salvas, resincroniza imediatamente em 1 clique
+                setNfcStatusMsg('🔄 Sincronizando com a Nuvem LibreLinkUp em tempo real...');
+                const token = localStorage.getItem('leben_token');
+                fetch('/api/v1/connectors/librelinkup/sync', {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ username: libreEmail, password: librePassword, region: libreRegion })
+                }).then(r => r.json()).then(json => {
+                  if (json.status === 'success') {
+                    setNfcStatusMsg(`🎉 Nuvem Abbott Sincronizada! Paciente: ${json.data.patientName || 'Julia'} — Atual: ${json.data.glucoseMgDl} mg/dL (${json.data.trend})`);
+                    fetchReadings();
+                  } else {
+                    setShowLibreModal(true);
+                  }
+                }).catch(() => setShowLibreModal(true));
+              } else {
+                setShowLibreModal(true);
+              }
+            }}
+            className={`inline-flex items-center justify-center gap-2 ${
+              libreEmail ? 'bg-emerald-600 hover:bg-emerald-700 ring-2 ring-emerald-400/50' : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700'
+            } text-white font-bold px-4 py-2.5 rounded-xl shadow-sm text-xs transition-all`}
+            title={libreEmail ? "Nuvem LibreLinkUp Conectada! Clique para resincronizar agora" : "Conectar com a nuvem do LibreLinkUp (Abbott)"}
           >
             <Wifi className="w-4 h-4" />
-            <span>☁️ Nuvem LibreLinkUp</span>
+            <span>{libreEmail ? '🟢 Nuvem Conectada 24h' : '☁️ Nuvem LibreLinkUp'}</span>
           </button>
 
           <button
@@ -323,7 +345,10 @@ export default function GlucoseLogPage() {
               });
               const json = await res.json();
               if (res.ok && json.status === 'success') {
-                setNfcStatusMsg(`🎉 Nuvem Abbott Conectada 24h! Paciente: ${json.data.patientName || 'Pedro'} — Atual: ${json.data.glucoseMgDl} mg/dL (${json.data.trend}) — Sincronização automática ativa a cada 5 min!`);
+                localStorage.setItem('leben_libre_email', libreEmail);
+                localStorage.setItem('leben_libre_password', librePassword);
+                localStorage.setItem('leben_libre_region', libreRegion);
+                setNfcStatusMsg(`🎉 Nuvem Abbott Conectada 24h! Paciente: ${json.data.patientName || 'Julia'} — Atual: ${json.data.glucoseMgDl} mg/dL (${json.data.trend}) — Sincronização automática ativa a cada 5 min!`);
                 setShowLibreModal(false);
                 fetchReadings();
               } else {
