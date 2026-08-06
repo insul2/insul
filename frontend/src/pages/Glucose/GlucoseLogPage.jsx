@@ -150,6 +150,13 @@ export default function GlucoseLogPage() {
     if (savedBolus) {
       setBolusHistory(JSON.parse(savedBolus));
     }
+
+    // Polling Silencioso em Tempo Real (Live Stream a cada 30 segundos)
+    const interval = setInterval(() => {
+      fetchReadings();
+    }, 30 * 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleAddReading = async (e) => {
