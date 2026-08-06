@@ -192,7 +192,7 @@ export async function syncLibreLinkUpHandler(req, res) {
     // Executa a primeira sincronização completa
     const result = await performAbbottSync({ username, password, region, user: req.user });
 
-    // Registra a sincronização contínua em segundo plano a cada 5 minutos
+    // Registra a sincronização contínua em segundo plano ultra-rápida (a cada 1 minuto)
     if (autoSync && !activeSyncJobs.has(req.user.id)) {
       const intervalId = setInterval(async () => {
         try {
@@ -202,7 +202,7 @@ export async function syncLibreLinkUpHandler(req, res) {
         } catch (bgErr) {
           console.error('⚠️ [BACKGROUND SYNC LEBEN] Erro ao sincronizar em segundo plano:', bgErr.message);
         }
-      }, 5 * 60 * 1000); // 5 minutos
+      }, 60 * 1000); // 1 minuto (60s)
 
       activeSyncJobs.set(req.user.id, { intervalId, username, region });
     }
