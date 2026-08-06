@@ -42,6 +42,24 @@ const DEFAULT_HEADERS = {
 const activeSyncJobs = new Map();
 
 /**
+ * Converte strings de Timestamp da Abbott ('8/6/2026 1:30:26 PM') para ISO com fuso -03:00 (Brasília)
+ */
+function parseAbbottTimestamp(rawStr) {
+  if (!rawStr) return new Date().toISOString();
+  const match = rawStr.match(/(\d+)\/(\d+)\/(\d+)\s+(\d+):(\d+):(\d+)\s+(AM|PM)/i);
+  if (match) {
+    let [, month, day, year, hours, minutes, seconds, ampm] = match;
+    let h = parseInt(hours, 10);
+    if (ampm.toUpperCase() === 'PM' && h < 12) h += 12;
+    if (ampm.toUpperCase() === 'AM' && h === 12) h = 0;
+    const pad = (n) => String(n).padStart(2, '0');
+    const isoStr = `${year}-${pad(month)}-${pad(day)}T${pad(h)}:${pad(minutes)}:${pad(seconds)}-03:00`;
+    return new Date(isoStr).toISOString();
+  }
+  return new Date(rawStr).toISOString();
+}
+
+/**
  * Função Auxiliar Interna para Buscar Dados da Nuvem da Abbott e Importar Histórico de 12h + Leitura Atual
  */
 export async function performAbbottSync({ username, password, region = 'la', user }) {
@@ -103,18 +121,18 @@ export async function performAbbottSync({ username, password, region = 'la', use
   let latestTrend = '➡️ Estável';
   let latestTimestamp = new Date().toISOString();
 
-  // A) Processar a leitura live mais recente (usando FactoryTimestamp no fuso do Brasil)
+  // A) Processar a leitura live mais recente (usando Timestamp com conversão exata para -03:00 BRT)
   if (patientConnection.glucoseMeasurement) {
     latestGlucose = patientConnection.glucoseMeasurement.ValueInMgPerDl || patientConnection.glucoseMeasurement.Value;
     latestTrend = LIBRE_TREND_MAP[patientConnection.glucoseMeasurement.TrendArrow] || '➡️ Estável';
-    const rawTime = patientConnection.glucoseMeasurement.FactoryTimestamp || patientConnection.glucoseMeasurement.Timestamp;
-    latestTimestamp = rawTime ? new Date(rawTime).toISOString() : latestTimestamp;
+    const rawTime = patientConnection.glucoseMeasurement.Timestamp;
+    latestTimestamp = parseAbbottTimestamp(rawTime);
   } else if (graphJson.data && graphJson.data.connection && graphJson.data.connection.glucoseMeasurement) {
     const m = graphJson.data.connection.glucoseMeasurement;
     latestGlucose = m.ValueInMgPerDl || m.Value;
     latestTrend = LIBRE_TREND_MAP[m.TrendArrow] || '➡️ Estável';
-    const rawTime = m.FactoryTimestamp || m.Timestamp;
-    latestTimestamp = rawTime ? new Date(rawTime).toISOString() : latestTimestamp;
+    const rawTime = m.Timestamp;
+    latestTimestamp = parseAbbottTimestamp(rawTime);
   }
 
   // B) Importar histórico retroativo completo (array graphData das últimas 12h~24h)
@@ -123,8 +141,8 @@ export async function performAbbottSync({ username, password, region = 'la', use
     const bg = point.ValueInMgPerDl || point.Value;
     if (bg && bg >= 40 && bg <= 500) {
       const ptTrend = LIBRE_TREND_MAP[point.TrendArrow] || '➡️ Estável';
-      const rawPtTime = point.FactoryTimestamp || point.Timestamp;
-      const ptTime = rawPtTime ? new Date(rawPtTime).toISOString() : new Date().toISOString();
+      const rawPtTime = point.Timestamp;
+      const ptTime = parseAbbottTimestamp(rawPtTime);
 
       const internalReq = {
         user,
