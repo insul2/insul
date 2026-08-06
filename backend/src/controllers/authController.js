@@ -204,7 +204,10 @@ export async function registerHandler(req, res) {
         persistedId = insertResult.rows[0].id;
       }
     } catch (dbErr) {
-      // 3. Persistir no MongoDB Atlas
+      // DB relacional indisponível: continuar para MongoDB e RAM
+    }
+
+    // 3. Persistir no MongoDB Atlas
     try {
       if (mongoose.connection.readyState === 1) {
         const UserSchema = new mongoose.Schema({
