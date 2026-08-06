@@ -322,12 +322,12 @@ export default function GlucoseLogPage() {
                 })
               });
               const json = await res.json();
-              if (json.status === 'success') {
-                setNfcStatusMsg(`🎉 Nuvem Abbott Sincronizada com Sucesso! Paciente: ${json.data.patientName || 'Pedro'} — Glicemia Atual: ${json.data.glucoseMgDl} mg/dL (${json.data.trend})`);
+              if (res.ok && json.status === 'success') {
+                setNfcStatusMsg(`🎉 Nuvem Abbott Sincronizada! Paciente: ${json.data.patientName || 'Pedro'} — Glicemia Atual: ${json.data.glucoseMgDl} mg/dL (${json.data.trend})`);
                 setShowLibreModal(false);
                 fetchReadings();
               } else {
-                setNfcStatusMsg(`⚠️ Erro no LibreLinkUp: ${json.message}`);
+                setNfcStatusMsg(`⚠️ Abbott LibreView (${res.status}): ${json.message || 'Falha na autenticação com os servidores da Abbott.'}`);
               }
             } catch (err) {
               setNfcStatusMsg('❌ Falha na conexão com a nuvem Abbott. Verifique sua internet.');
