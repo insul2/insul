@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { calculateBolusHandler } from '../controllers/bolusController.js';
 import { searchFoodsHandler } from '../controllers/foodController.js';
 import { getGlucoseReadingsHandler, logGlucoseReadingHandler } from '../controllers/glucoseController.js';
+import { syncLibreLinkUpHandler, syncNightscoutHandler } from '../controllers/connectorController.js';
 import { loginHandler, registerHandler, refreshTokenHandler } from '../controllers/authController.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
 
@@ -17,5 +18,9 @@ router.post('/bolus/calculate', authMiddleware, calculateBolusHandler);
 router.get('/foods/search', authMiddleware, searchFoodsHandler);
 router.get('/glucose', authMiddleware, getGlucoseReadingsHandler);
 router.post('/glucose', authMiddleware, logGlucoseReadingHandler);
+
+// Endpoints de Conectores de CGM (LibreLinkUp & Nightscout)
+router.post('/connectors/librelinkup/sync', authMiddleware, syncLibreLinkUpHandler);
+router.post('/connectors/nightscout/entries', authMiddleware, syncNightscoutHandler);
 
 export default router;

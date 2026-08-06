@@ -42,34 +42,27 @@ export default function GlucoseLogPage() {
 
       ndef.onreading = async (event) => {
         setIsNfcScanning(false);
-        setNfcStatusMsg('✅ Sensor lido com sucesso! Processando histórico das últimas 8 horas...');
 
-        // 1. Efeito Sonoro da Leitura do Sensor (Web Audio API Beep)
+        // 1. Efeito Sonoro Beep Duplo de Sucesso (Web Audio API)
         try {
           const AudioContext = window.AudioContext || window.webkitAudioContext;
           if (AudioContext) {
             const ctx = new AudioContext();
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
-            
             osc.type = 'sine';
-            osc.frequency.setValueAtTime(880, ctx.currentTime); // Tom A5 (Beep de confirmação médica)
-            osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.15); // Tom E6 ascendente de sucesso
-            
+            osc.frequency.setValueAtTime(880, ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.15);
             gain.gain.setValueAtTime(0.3, ctx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
-            
             osc.connect(gain);
             gain.connect(ctx.destination);
-            
             osc.start();
             osc.stop(ctx.currentTime + 0.15);
           }
-        } catch (audioErr) {
-          console.warn('Áudio Web não suportado:', audioErr);
-        }
+        } catch (e) {}
 
-        // 2. Vibração Tátil Dupla do Celular
+        // 2. Vibração Tátil do Smartphone
         if ('vibrate' in navigator) {
           navigator.vibrate([120, 80, 160]);
         }
@@ -77,98 +70,65 @@ export default function GlucoseLogPage() {
         let scannedGlucose = 0;
         let batchReadings = [];
 
-        // Decodificação do Buffer de Memória do FreeStyle Libre (ISO 15693 / Transponder / NDEF)
+        // 3. Decodificação Robusta do Payload NFC
         if (event.message && event.message.records && event.message.records.length > 0) {
-          try {
-            for (const record of event.message.records) {
-              // 1. Tentar decodificar se o payload for Texto/JSON/NDEF
-              if (record.data) {
-                const buffer = new Uint8Array(record.data.buffer || record.data);
+          for (const record of event.message.records) {
+            if (record.data) {
+              const buffer = new Uint8Array(record.data.buffer || record.data);
 
-                try {
-                  const text = new TextDecoder().decode(record.data);
-                  const matchedNum = text.match(/\b([4-9]\d|[1-4]\d\d|500)\b/);
-                  if (matchedNum) {
-                    scannedGlucose = parseInt(matchedNum[1], 10);
-                  }
-                } catch (e) {}
-
-                // 2. Se o buffer for um RAM dump do transponder (320 bytes ou superior)
-                if (buffer.length >= 320) {
-                  const rawCurrent = ((buffer[29] & 0x0f) << 8) | (buffer[28] & 0xff);
-                  const currentGlucoseCalculated = Math.round(rawCurrent / 10);
-                  if (currentGlucoseCalculated >= 40 && currentGlucoseCalculated <= 500) {
-                    scannedGlucose = currentGlucoseCalculated;
-                  }
-
-                  // Blocos de histórico (32 leituras de 15 min)
-                  const historicalIndex = buffer[27];
-                  const historyStartByte = 124;
-
-                  for (let i = 0; i < 32; i++) {
-                    const idx = (historicalIndex - 1 - i + 32) % 32;
-                    const offset = historyStartByte + (idx * 6);
-                    
-                    if (offset + 1 < buffer.length) {
-                      const rawVal = ((buffer[offset + 1] & 0x0f) << 8) | (buffer[offset] & 0xff);
-                      const glucoseMg = Math.round(rawVal / 10);
-                      
-                      if (glucoseMg >= 40 && glucoseMg <= 500) {
-                        batchReadings.push({
-                          glucoseMgDl: glucoseMg,
-                          trend: i === 0 ? '➡️ Estável' : '📊 Histórico Sensor',
-                          timestamp: new Date(Date.now() - (i * 15 * 60 * 1000)).toISOString()
-                        });
-                      }
-                    }
-                  }
+              // Estratégia A: Buffer RAM Dump (320 bytes ou superior)
+              if (buffer.length >= 320) {
+                const rawCurrent = ((buffer[29] & 0x0f) << 8) | (buffer[28] & 0xff);
+                const calcBg = Math.round(rawCurrent / 10);
+                if (calcBg >= 40 && calcBg <= 500) {
+                  scannedGlucose = calcBg;
                 }
               }
+
+              // Estratégia B: Payload de Texto / NDEF String
+              if (!scannedGlucose) {
+                try {
+                  const text = new TextDecoder().decode(buffer);
+                  const matched = text.match(/\b([4-9]\d|[1-4]\d\d|500)\b/);
+                  if (matched) {
+                    scannedGlucose = parseInt(matched[1], 10);
+                  }
+                } catch (e) {}
+              }
             }
-          } catch (e) {
-            console.warn('Erro ao decodificar frame do sensor Libre:', e);
           }
         }
 
-        // Se o leitor NFC leu a tag mas o SO não entregou os bytes decodificados em NDEF, solicita confirmação via modal/form
-        if (!scannedGlucose || scannedGlucose < 40) {
-          scannedGlucose = 135; // Valor padrão de pré-preenchimento para a medição manual
+        if (scannedGlucose >= 40 && scannedGlucose <= 500) {
+          setNfcStatusMsg(`🎉 Sensor lido via NFC! Glicemia detectada: ${scannedGlucose} mg/dL`);
+          setNewGlucose(String(scannedGlucose));
+          setShowAddModal(true);
+        } else {
+          setNfcStatusMsg('📱 Sensor Libre aproximado! Digite o valor exibido no leitor para salvar:');
+          setNewGlucose('');
+          setShowAddModal(true);
         }
+      };
 
-        // Se não gerou lote histórico, cria os 32 pontos contínuos retroativos
-        if (batchReadings.length === 0) {
-          batchReadings.push({ glucoseMgDl: scannedGlucose, trend: '➡️ Estável', timestamp: new Date().toISOString() });
-          for (let i = 1; i <= 31; i++) {
-            const variance = Math.sin(i / 2) * 10;
-            const historicVal = Math.max(70, Math.min(300, Math.round(scannedGlucose + variance)));
-            batchReadings.push({
-              glucoseMgDl: historicVal,
-              trend: '📊 Histórico Sensor',
-              timestamp: new Date(Date.now() - (i * 15 * 60 * 1000)).toISOString()
-            });
+        // Se capturou dados reais em lote do sensor, envia para o backend
+        if (batchReadings.length > 0) {
+          try {
+            const token = localStorage.getItem('leben_token');
+            for (const item of batchReadings) {
+              await fetch('/api/v1/glucose', {
+                method: 'POST',
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(item)
+              });
+            }
+            setNfcStatusMsg(`🎉 Sucesso! Medição do sensor (${scannedGlucose} mg/dL) e ${batchReadings.length} pontos sincronizados!`);
+            fetchReadings();
+          } catch (err) {
+            console.error('Erro ao enviar lote NFC para o backend:', err);
           }
-        }
-
-        setNewGlucose(String(scannedGlucose));
-        setShowAddModal(true);
-
-        // Envia todos os 32 pontos das últimas 8 horas em lote para o backend e MongoDB Atlas
-        try {
-          const token = localStorage.getItem('leben_token');
-          for (const item of batchReadings) {
-            await fetch('/api/v1/glucose', {
-              method: 'POST',
-              headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify(item)
-            });
-          }
-          setNfcStatusMsg(`🎉 Sucesso! Medição atual (${scannedGlucose} mg/dL) e ${batchReadings.length} pontos das últimas 8 horas sincronizados!`);
-          fetchReadings();
-        } catch (err) {
-          console.error('Erro ao enviar lote NFC para o backend:', err);
         }
       };
 
@@ -322,6 +282,34 @@ export default function GlucoseLogPage() {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={async () => {
+              setNfcStatusMsg('🔄 Sincronizando com a Nuvem LibreLinkUp (Abbott)...');
+              try {
+                const token = localStorage.getItem('leben_token');
+                const res = await fetch('/api/v1/connectors/librelinkup/sync', {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ username: 'paciente@email.com', password: '***' })
+                });
+                const json = await res.json();
+                if (json.status === 'success') {
+                  setNfcStatusMsg(`🎉 Nuvem LibreLinkUp Sincronizada! Glicemia Atual: ${json.data.glucoseMgDl} mg/dL (${json.data.trend})`);
+                  fetchReadings();
+                } else {
+                  setNfcStatusMsg(`⚠️ Sincronização LibreLinkUp: ${json.message}`);
+                }
+              } catch (e) {
+                setNfcStatusMsg('❌ Não foi possível conectar ao serviço LibreLinkUp.');
+              }
+            }}
+            className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm text-xs transition-all"
+            title="Conectar com a nuvem do LibreLinkUp (Abbott)"
+          >
+            <Wifi className="w-4 h-4" />
+            <span>☁️ Nuvem LibreLinkUp</span>
+          </button>
+
+          <button
             onClick={handleNfcScan}
             disabled={isNfcScanning}
             className={`inline-flex items-center justify-center gap-2 ${
@@ -334,7 +322,7 @@ export default function GlucoseLogPage() {
 
           <button
             onClick={() => setShowAddModal(!showAddModal)}
-            className="inline-flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm text-xs transition-colors"
+            className="inline-flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm text-xs transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span>Nova Medição Manual</span>
