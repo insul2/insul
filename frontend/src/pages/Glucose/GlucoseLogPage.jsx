@@ -151,10 +151,10 @@ export default function GlucoseLogPage() {
       setBolusHistory(JSON.parse(savedBolus));
     }
 
-    // Polling Ultra Rápido em Tempo Real (Live Stream a cada 5 segundos)
+    // Polling Perfeito em Tempo Real (Live Stream a cada 4 minutos)
     const interval = setInterval(() => {
       fetchReadings();
-    }, 5 * 1000);
+    }, 4 * 60 * 1000); // 4 minutos (240s)
 
     return () => clearInterval(interval);
   }, []);
