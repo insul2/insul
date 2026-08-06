@@ -103,17 +103,17 @@ export async function performAbbottSync({ username, password, region = 'la', use
   let latestTrend = '➡️ Estável';
   let latestTimestamp = new Date().toISOString();
 
-  // A) Processar a leitura live mais recente
+  // A) Processar a leitura live mais recente (usando FactoryTimestamp no fuso do Brasil)
   if (patientConnection.glucoseMeasurement) {
     latestGlucose = patientConnection.glucoseMeasurement.ValueInMgPerDl || patientConnection.glucoseMeasurement.Value;
     latestTrend = LIBRE_TREND_MAP[patientConnection.glucoseMeasurement.TrendArrow] || '➡️ Estável';
-    const rawTime = patientConnection.glucoseMeasurement.Timestamp;
+    const rawTime = patientConnection.glucoseMeasurement.FactoryTimestamp || patientConnection.glucoseMeasurement.Timestamp;
     latestTimestamp = rawTime ? new Date(rawTime).toISOString() : latestTimestamp;
   } else if (graphJson.data && graphJson.data.connection && graphJson.data.connection.glucoseMeasurement) {
     const m = graphJson.data.connection.glucoseMeasurement;
     latestGlucose = m.ValueInMgPerDl || m.Value;
     latestTrend = LIBRE_TREND_MAP[m.TrendArrow] || '➡️ Estável';
-    const rawTime = m.Timestamp;
+    const rawTime = m.FactoryTimestamp || m.Timestamp;
     latestTimestamp = rawTime ? new Date(rawTime).toISOString() : latestTimestamp;
   }
 
@@ -123,7 +123,7 @@ export async function performAbbottSync({ username, password, region = 'la', use
     const bg = point.ValueInMgPerDl || point.Value;
     if (bg && bg >= 40 && bg <= 500) {
       const ptTrend = LIBRE_TREND_MAP[point.TrendArrow] || '➡️ Estável';
-      const rawPtTime = point.Timestamp;
+      const rawPtTime = point.FactoryTimestamp || point.Timestamp;
       const ptTime = rawPtTime ? new Date(rawPtTime).toISOString() : new Date().toISOString();
 
       const internalReq = {
