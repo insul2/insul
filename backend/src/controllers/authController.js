@@ -204,8 +204,28 @@ export async function registerHandler(req, res) {
         persistedId = insertResult.rows[0].id;
       }
     } catch (dbErr) {
-      // DB indisponível: continuar apenas com o cache RAM
-    }
+      // 3. Persistir no MongoDB Atlas
+    try {
+      if (mongoose.connection.readyState === 1) {
+        const UserSchema = new mongoose.Schema({
+          name: String,
+          email: String,
+          password_hash: String,
+          role: String,
+          diabetes_type: String,
+          created_at: Date
+        });
+        const UserModel = mongoose.models.User || mongoose.model('User', UserSchema);
+        await UserModel.create({
+          name: newUser.name,
+          email: cleanEmail,
+          password_hash: passwordHash,
+          role: newUser.role,
+          diabetes_type: newUser.diabetesType,
+          created_at: new Date()
+        });
+      }
+    } catch (mongoErr) {}
 
     // RT-04: Adicionar expiresAt ao salvar no cache RAM
     registeredUsersCache.set(cleanEmail, {
