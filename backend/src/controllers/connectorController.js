@@ -129,6 +129,7 @@ export async function performAbbottSync({ username, password, region = 'la', use
         body: {
           glucoseMgDl: Number(bg),
           trend: ptTrend,
+          timestamp: ptTime,
           record_type: 'LIBRE_LINK_UP'
         }
       };
@@ -151,6 +152,7 @@ export async function performAbbottSync({ username, password, region = 'la', use
       body: {
         glucoseMgDl: Number(latestGlucose),
         trend: latestTrend,
+        timestamp: latestTimestamp,
         record_type: 'LIBRE_LINK_UP'
       }
     };

@@ -140,7 +140,7 @@ export async function logGlucoseReadingHandler(req, res) {
     const readingDate = timestamp ? new Date(timestamp) : new Date();
 
     const newReading = {
-      id: String(Date.now() + Math.random()),
+      id: `glc_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
       glucoseMgDl: Number(glucoseMgDl),
       trend: trend || '➡️ Estável',
       timestamp: readingDate.toISOString()
