@@ -104,31 +104,9 @@ export default function GlucoseLogPage() {
           setNewGlucose(String(scannedGlucose));
           setShowAddModal(true);
         } else {
-          setNfcStatusMsg('📱 Sensor Libre aproximado! Digite o valor exibido no leitor para salvar:');
+          setNfcStatusMsg('📱 Sensor Libre 2 detectado via NFC! Digite a medição do seu leitor para salvar:');
           setNewGlucose('');
           setShowAddModal(true);
-        }
-      };
-
-        // Se capturou dados reais em lote do sensor, envia para o backend
-        if (batchReadings.length > 0) {
-          try {
-            const token = localStorage.getItem('leben_token');
-            for (const item of batchReadings) {
-              await fetch('/api/v1/glucose', {
-                method: 'POST',
-                headers: { 
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(item)
-              });
-            }
-            setNfcStatusMsg(`🎉 Sucesso! Medição do sensor (${scannedGlucose} mg/dL) e ${batchReadings.length} pontos sincronizados!`);
-            fetchReadings();
-          } catch (err) {
-            console.error('Erro ao enviar lote NFC para o backend:', err);
-          }
         }
       };
 

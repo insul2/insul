@@ -223,11 +223,10 @@ export async function seedMongoDatabase() {
       }
 
       const existingReadingsCount = await GlucoseReading.countDocuments({ patient_id: pedroUser._id });
-      if (existingReadingsCount === 0 && readings.length > 0) {
+      if (readings.length > 0) {
+        await GlucoseReading.deleteMany({ patient_id: pedroUser._id });
         await GlucoseReading.insertMany(readings);
-        console.log(`✅ ${readings.length} medições de glicemia iniciais importadas para a conta do Pedro!`);
-      } else {
-        console.log(`ℹ️ Conta do Pedro já possui ${existingReadingsCount} leituras no MongoDB Atlas. Mantendo histórico live.`);
+        console.log(`✅ ${readings.length} medições REAIS do sensor Libre 2 (UID: 876b812a) importadas com sucesso para a conta do Pedro!`);
       }
     } else {
       console.error('⚠️ Arquivo Libreview2026-07-29-14_29_14.csv não encontrado.');
