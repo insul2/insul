@@ -107,12 +107,14 @@ export async function performAbbottSync({ username, password, region = 'la', use
   if (patientConnection.glucoseMeasurement) {
     latestGlucose = patientConnection.glucoseMeasurement.ValueInMgPerDl || patientConnection.glucoseMeasurement.Value;
     latestTrend = LIBRE_TREND_MAP[patientConnection.glucoseMeasurement.TrendArrow] || '➡️ Estável';
-    latestTimestamp = patientConnection.glucoseMeasurement.Timestamp || latestTimestamp;
+    const rawTime = patientConnection.glucoseMeasurement.Timestamp;
+    latestTimestamp = rawTime ? new Date(rawTime).toISOString() : latestTimestamp;
   } else if (graphJson.data && graphJson.data.connection && graphJson.data.connection.glucoseMeasurement) {
     const m = graphJson.data.connection.glucoseMeasurement;
     latestGlucose = m.ValueInMgPerDl || m.Value;
     latestTrend = LIBRE_TREND_MAP[m.TrendArrow] || '➡️ Estável';
-    latestTimestamp = m.Timestamp || latestTimestamp;
+    const rawTime = m.Timestamp;
+    latestTimestamp = rawTime ? new Date(rawTime).toISOString() : latestTimestamp;
   }
 
   // B) Importar histórico retroativo completo (array graphData das últimas 12h~24h)
@@ -121,7 +123,8 @@ export async function performAbbottSync({ username, password, region = 'la', use
     const bg = point.ValueInMgPerDl || point.Value;
     if (bg && bg >= 40 && bg <= 500) {
       const ptTrend = LIBRE_TREND_MAP[point.TrendArrow] || '➡️ Estável';
-      const ptTime = point.Timestamp || new Date().toISOString();
+      const rawPtTime = point.Timestamp;
+      const ptTime = rawPtTime ? new Date(rawPtTime).toISOString() : new Date().toISOString();
 
       const internalReq = {
         user,
