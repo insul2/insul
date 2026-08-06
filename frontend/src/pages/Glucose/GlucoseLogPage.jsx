@@ -131,12 +131,15 @@ export default function GlucoseLogPage() {
       const res = await fetch('/api/v1/glucose', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const json = await res.json();
-      if (json.status === 'success') {
+      if (!res.ok) return;
+      const text = await res.text();
+      if (!text) return;
+      const json = JSON.parse(text);
+      if (json.status === 'success' && Array.isArray(json.data)) {
         setReadings(json.data);
       }
     } catch (err) {
-      console.error('Erro ao carregar glicemia:', err);
+      console.warn('Backend reiniciando ou sem resposta JSON completa:', err.message);
     }
   };
 

@@ -24,8 +24,17 @@ export default function FoodSearchPage() {
           'Authorization': `Bearer ${token}`
         }
       });
-      const json = await res.json();
-      if (json.status === 'success') {
+      if (!res.ok) {
+        setLoading(false);
+        return;
+      }
+      const text = await res.text();
+      if (!text) {
+        setLoading(false);
+        return;
+      }
+      const json = JSON.parse(text);
+      if (json.status === 'success' && json.data) {
         setFoods(json.data);
       }
     } catch (err) {
