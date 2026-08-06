@@ -70,31 +70,27 @@ export async function getGlucoseReadingsHandler(req, res) {
             trend: d.trend || '➡️ Estável',
             timestamp: d.read_at.toISOString()
           }));
-          return res.status(200).json({ status: 'success', data: readings });
         }
       }
     } catch (mongoErr) {}
 
-    // 2. Buscar no PostgreSQL se disponível
-    try {
-      const dbRes = await query(
-        'SELECT id, glucose_mg_dl as "glucoseMgDl", trend, created_at as timestamp FROM glucose_readings WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
-        [userId]
-      );
-      if (dbRes && dbRes.rows && dbRes.rows.length > 0) {
-        return res.status(200).json({
-          status: 'success',
-          data: dbRes.rows
-        });
+    // 2. Mesclar com a memória em tempo real para não perder pontos da Abbott live
+    const memoryReadings = userReadingsMap.get(userId) || [];
+    const mergedMap = new Map();
+    [...readings, ...memoryReadings].forEach(item => {
+      if (item && item.timestamp) {
+        const key = `${item.glucoseMgDl}_${new Date(item.timestamp).getTime()}`;
+        if (!mergedMap.has(key)) {
+          mergedMap.set(key, item);
+        }
       }
-    } catch (dbErr) {
-      // Fallback para cache isolado por usuário
-    }
+    });
 
-    readings = userReadingsMap.get(userId) || [];
+    const finalReadings = Array.from(mergedMap.values()).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
     return res.status(200).json({
       status: 'success',
-      data: readings
+      data: finalReadings
     });
   } catch (error) {
     return res.status(500).json({
