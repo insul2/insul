@@ -12,6 +12,19 @@ import { query } from '../config/database.js';
 // Repositório em cache RAM para fallback e alta performance
 export const registeredUsersCache = new Map();
 
+// RT-04: TTL de 2h para entradas do cache RAM — previne Out-of-Memory sob carga
+// Cada entrada é { user, expiresAt }. O setInterval limpa expirados a cada 30 min.
+const CACHE_USER_TTL_MS = 2 * 60 * 60 * 1000; // 2 horas
+setInterval(() => {
+  const now = Date.now();
+  for (const [email, entry] of registeredUsersCache.entries()) {
+    // Manter o usuário demo permanentemente (não tem expiresAt)
+    if (entry.expiresAt && entry.expiresAt < now) {
+      registeredUsersCache.delete(email);
+    }
+  }
+}, 30 * 60 * 1000).unref(); // .unref() garante que o timer não impede o processo de encerrar
+
 // Usuário padrão de demonstração pré-cadastrado com hash seguro
 const demoPasswordHash = bcrypt.hashSync('senha123', 10);
 registeredUsersCache.set('paciente@leben.com', {
@@ -22,6 +35,7 @@ registeredUsersCache.set('paciente@leben.com', {
   role: 'PATIENT',
   diabetesType: 'TYPE_1',
   createdAt: new Date().toISOString()
+  // Sem expiresAt: conta demo é permanente
 });
 
 export async function loginHandler(req, res) {
@@ -168,17 +182,36 @@ export async function registerHandler(req, res) {
     };
 
     // 2. Persistir no PostgreSQL se disponível
+    // RT-05: Verificar rowCount antes de emitir JWT. ON CONFLICT retorna rowCount=0.
+    let persistedId = userId;
     try {
-      await query(
+      const insertResult = await query(
         `INSERT INTO users (id, name, email, password_hash, role, diabetes_type, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW()) ON CONFLICT (email) DO NOTHING`,
+         VALUES ($1, $2, $3, $4, $5, $6, NOW()) ON CONFLICT (email) DO NOTHING RETURNING id`,
         [userId, newUser.name, cleanEmail, passwordHash, newUser.role, newUser.diabetesType]
       );
+
+      // Se rowCount === 0, o e-mail já existia no banco mas não estava no cache.
+      // Não emitir JWT para um ID que pode não ter sido criado.
+      if (insertResult && insertResult.rowCount === 0) {
+        return res.status(409).json({
+          status: 'error',
+          message: 'Este e-mail já está cadastrado no LEBEN.'
+        });
+      }
+
+      if (insertResult && insertResult.rows && insertResult.rows[0]) {
+        persistedId = insertResult.rows[0].id;
+      }
     } catch (dbErr) {
-      // Ignorar se DB indisponível localmente e manter em cache RAM
+      // DB indisponível: continuar apenas com o cache RAM
     }
 
-    registeredUsersCache.set(cleanEmail, newUser);
+    // RT-04: Adicionar expiresAt ao salvar no cache RAM
+    registeredUsersCache.set(cleanEmail, {
+      ...newUser,
+      expiresAt: Date.now() + CACHE_USER_TTL_MS
+    });
 
     const userPayload = {
       id: newUser.id,

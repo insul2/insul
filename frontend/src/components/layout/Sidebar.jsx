@@ -28,7 +28,6 @@ export default function Sidebar() {
     { label: 'Alimentação', path: '/foods', icon: UtensilsCrossed },
     { label: 'Glicemia', path: '/glucose', icon: Droplet },
     { label: 'Relatórios', path: '/reports', icon: BarChart3 },
-    { label: 'LEBEN AI', path: '/ai', icon: Bot },
     { label: 'Perfil', path: '/profile', icon: User },
     { label: 'Configurações', path: '/settings', icon: Settings },
   ];

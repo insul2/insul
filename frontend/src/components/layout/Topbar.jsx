@@ -5,7 +5,9 @@ import { useAuth } from '../../context/AuthContext';
 
 export default function Topbar() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(() => {
+    return localStorage.getItem('leben_theme') === 'dark';
+  });
   const [showNotifications, setShowNotifications] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -13,8 +15,10 @@ export default function Topbar() {
   useEffect(() => {
     if (isDark) {
       document.documentElement.classList.add('dark');
+      localStorage.setItem('leben_theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
+      localStorage.setItem('leben_theme', 'light');
     }
   }, [isDark]);
 

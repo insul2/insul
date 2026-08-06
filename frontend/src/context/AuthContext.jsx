@@ -30,18 +30,8 @@ export function AuthProvider({ children }) {
       }
       return { success: false, message: json.message || 'Falha na autenticação.' };
     } catch (err) {
-      // Smart Fallback Local em caso de reconexão
-      const cleanEmail = (email || 'paciente@leben.com').toLowerCase().trim();
-      const displayName = cleanEmail === 'paciente@leben.com' 
-        ? 'Dr. Paciente LEBEN' 
-        : cleanEmail.split('@')[0].replace('.', ' ').replace(/\b\w/g, l => l.toUpperCase());
-
-      const fallbackUser = { id: 'usr_' + Date.now(), name: displayName, email: cleanEmail };
-      localStorage.setItem('leben_token', 'demo_token_123');
-      localStorage.setItem('leben_user', JSON.stringify(fallbackUser));
-      setUser(fallbackUser);
-      setIsAuthenticated(true);
-      return { success: true };
+      console.error('❌ Login error:', err);
+      return { success: false, message: 'Não foi possível conectar ao servidor LEBEN. Verifique sua conexão.' };
     }
   };
 
@@ -66,13 +56,8 @@ export function AuthProvider({ children }) {
       }
       return { success: false, message: json.message || 'Falha no cadastro.' };
     } catch (err) {
-      // Smart Fallback Local para modo resiliente offline
-      const fallbackUser = { id: 'usr_' + Date.now(), name: name.trim(), email: email.toLowerCase().trim(), diabetesType };
-      localStorage.setItem('leben_token', 'demo_token_reg_' + Date.now());
-      localStorage.setItem('leben_user', JSON.stringify(fallbackUser));
-      setUser(fallbackUser);
-      setIsAuthenticated(true);
-      return { success: true };
+      console.error('❌ Register error:', err);
+      return { success: false, message: 'Não foi possível conectar ao servidor LEBEN para realizar o cadastro.' };
     }
   };
 

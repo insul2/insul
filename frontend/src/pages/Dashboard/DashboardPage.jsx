@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import GlucoseChart24h from '../../components/charts/GlucoseChart24h';
 import { useAuth } from '../../context/AuthContext';
 import { computeAutoIOB } from '../../utils/iobCalculator';
+import { computeGlucoseStats } from '../../utils/glucoseStats';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -12,9 +13,11 @@ export default function DashboardPage() {
   const [bolusHistory, setBolusHistory] = useState([]);
   const [activeIob, setActiveIob] = useState(0);
   const [lastBolusInfo, setLastBolusInfo] = useState(null);
+  const [stats, setStats] = useState({ tir: 0, gmi: 0, total: 0 });
 
   useEffect(() => {
     const fetchApiReadings = async () => {
+      let readings = [];
       try {
         const token = localStorage.getItem('leben_token');
         const res = await fetch('/api/v1/glucose', {
@@ -22,14 +25,22 @@ export default function DashboardPage() {
         });
         const json = await res.json();
         if (json.status === 'success' && json.data && json.data.length > 0) {
-          setGlucoseReadings(json.data);
-          return;
+          readings = json.data;
         }
       } catch (e) {}
 
-      const savedReadings = localStorage.getItem('leben_glucose_readings');
-      const readings = savedReadings ? JSON.parse(savedReadings) : [];
+      if (readings.length === 0) {
+        const savedReadings = localStorage.getItem('leben_glucose_readings');
+        readings = savedReadings ? JSON.parse(savedReadings) : [];
+      }
+
       setGlucoseReadings(readings);
+
+      if (readings.length > 0) {
+        const values = readings.map(r => r.glucoseMgDl || r.glucose || 0).filter(v => v > 0);
+        const computed = computeGlucoseStats(values);
+        setStats({ tir: computed.tir, gmi: computed.gmi, total: computed.total });
+      }
     };
 
     fetchApiReadings();
@@ -113,7 +124,7 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-baseline gap-1">
             <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-              {latestGlucose ? latestGlucose.glucoseMgDl : '--'}
+              {latestGlucose ? (latestGlucose.glucoseMgDl || latestGlucose.glucose) : '--'}
             </span>
             {latestGlucose && <span className="text-[10px] text-slate-500 dark:text-slate-400">mg/dL</span>}
           </div>
@@ -170,7 +181,7 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Card 5: Tempo na Faixa (TIR) */}
+        {/* Card 5: Tempo na Faixa (TIR) - CALCULADO REAL */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm transition-colors">
           <div className="flex items-center justify-between text-slate-600 dark:text-slate-400 mb-1">
             <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">TIR (Faixa)</span>
@@ -178,15 +189,15 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-baseline gap-1">
             <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-              {glucoseReadings.length > 0 ? '100%' : '--'}
+              {stats.total > 0 ? `${stats.tir}%` : '--'}
             </span>
           </div>
           <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold mt-1">
-            {glucoseReadings.length > 0 ? 'Meta >70% cumprida' : 'Aguardando medições'}
+            {stats.total > 0 ? (stats.tir >= 70 ? 'Meta >70% cumprida' : 'Abaixo da meta 70%') : 'Aguardando medições'}
           </p>
         </div>
 
-        {/* Card 6: GMI (HbA1c Estimada) */}
+        {/* Card 6: GMI (HbA1c Estimada) - CALCULADO REAL */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm transition-colors">
           <div className="flex items-center justify-between text-slate-600 dark:text-slate-400 mb-1">
             <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider">GMI (HbA1c)</span>
@@ -194,11 +205,11 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-baseline gap-1">
             <span className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white">
-              {glucoseReadings.length > 0 ? '6.0%' : '--'}
+              {stats.total > 0 ? `${stats.gmi}%` : '--'}
             </span>
           </div>
           <p className="text-[10px] text-slate-600 dark:text-slate-400 font-medium mt-1">
-            {glucoseReadings.length > 0 ? 'Estimativa clínica' : 'Aguardando histórico'}
+            {stats.total > 0 ? 'Estimativa clínica real' : 'Aguardando histórico'}
           </p>
         </div>
       </div>
@@ -232,7 +243,7 @@ export default function DashboardPage() {
           </Link>
 
           <Link
-            to="/bolus"
+            to="/bolus?exercise=true"
             className="flex items-center gap-3 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-850 border border-slate-200 dark:border-slate-800 text-emerald-500 p-4 rounded-2xl font-bold active:scale-95 transition-transform shadow-xs"
           >
             <Dumbbell className="w-6 h-6 shrink-0" />

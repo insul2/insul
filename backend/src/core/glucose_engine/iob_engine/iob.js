@@ -25,7 +25,7 @@ function curveRegular(t) {
   return Math.max(0, 1 - (3.0 * Math.pow(t, 2)) + (3.2 * Math.pow(t, 3)) - (1.2 * Math.pow(t, 4)));
 }
 
-export function calculateIOBFraction(timeElapsedMinutes, insulinType = 'HUMALOG') {
+export function calculateIOBFraction(timeElapsedMinutes, insulinType = 'HUMALOG', customDiaHours = null) {
   const type = (insulinType || 'HUMALOG').toUpperCase();
   let diaHours = 4.0;
   let curveFn = curveHumalog;
@@ -38,15 +38,19 @@ export function calculateIOBFraction(timeElapsedMinutes, insulinType = 'HUMALOG'
     curveFn = curveRegular;
   }
 
+  // CROSS-03: Se um DIA personalizado do paciente foi fornecido, sobrepõe o padrão do tipo.
+  // Isso garante que Patient.diaHours do banco de dados seja efetivamente usado no cálculo.
+  const effectiveDiaHours = (customDiaHours && customDiaHours > 0) ? customDiaHours : diaHours;
+
   if (timeElapsedMinutes <= 0) return 1.0;
-  const diaMinutes = diaHours * 60;
+  const diaMinutes = effectiveDiaHours * 60;
   if (timeElapsedMinutes >= diaMinutes) return 0.0;
 
   const t = timeElapsedMinutes / diaMinutes;
   return Math.max(0, Math.min(1, curveFn(t)));
 }
 
-export function calculateRemainingIOB(doseDrawn, timeElapsedMinutes, insulinType = 'HUMALOG') {
-  const fraction = calculateIOBFraction(timeElapsedMinutes, insulinType);
+export function calculateRemainingIOB(doseDrawn, timeElapsedMinutes, insulinType = 'HUMALOG', customDiaHours = null) {
+  const fraction = calculateIOBFraction(timeElapsedMinutes, insulinType, customDiaHours);
   return Number((doseDrawn * fraction).toFixed(2));
 }

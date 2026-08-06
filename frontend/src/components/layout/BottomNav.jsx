@@ -8,9 +8,6 @@ export default function BottomNav() {
     { label: 'Bolus', path: '/bolus', icon: Syringe },
     { label: 'Comida', path: '/foods', icon: UtensilsCrossed },
     { label: 'Glicemia', path: '/glucose', icon: Droplet },
-    { label: 'Relatórios', path: '/reports', icon: BarChart3 },
-    { label: 'Perfil', path: '/profile', icon: User },
-    { label: 'Ajustes', path: '/settings', icon: Settings },
   ];
 
   return (

@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node tests/test_engine.js"
+    "test": "node ../tests/test_engine.js && node ../tests/regression_suite.js && node ../tests/api_integration.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

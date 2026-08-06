@@ -37,13 +37,13 @@ export default function AppRoutes() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="bolus" element={<BolusCalculatorPage />} />
-        <Route path="meals" element={<FoodSearchPage />} />
+        <Route path="meals" element={<Navigate to="/foods" replace />} />
         <Route path="foods" element={<FoodSearchPage />} />
         <Route path="glucose" element={<GlucoseLogPage />} />
         <Route path="reports" element={<ReportsPage />} />
-        <Route path="ai" element={<DashboardPage />} />
+        <Route path="ai" element={<Navigate to="/" replace />} />
         <Route path="profile" element={<ProfilePage />} />
-        <Route path="alerts" element={<DashboardPage />} />
+        <Route path="alerts" element={<Navigate to="/" replace />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
     </Routes>

@@ -25,26 +25,62 @@ export const PATIENT_PROFILES = {
   ELDERLY: { key: 'ELDERLY', label: 'Idoso / Prevenção Hipo', targetGlucose: 140 }
 };
 
+/**
+ * Valida se um valor bruto de entrada é numericamente seguro para uso clínico.
+ * Rejeita: strings, null, undefined, NaN, Infinity, -Infinity.
+ * @param {*} value - Valor bruto do input
+ * @returns {boolean}
+ */
+function isNumericallySafe(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string' && value.trim() === '') return false;
+  const n = Number(value);
+  return !isNaN(n) && isFinite(n);
+}
+
 export function validateBolusInput(input) {
   const errors = [];
   const warnings = [];
 
+  // --- Validação de Tipo Numérico (RT-02: previne NaN e crash) ---
+  if (!isNumericallySafe(input.glucose)) {
+    errors.push(`Glicemia inválida: o valor "${input.glucose}" não é um número válido.`);
+  }
+  if (input.carbs !== undefined && input.carbs !== null && !isNumericallySafe(input.carbs)) {
+    errors.push(`Carboidratos inválidos: o valor "${input.carbs}" não é um número válido.`);
+  }
+  if (input.iob !== undefined && input.iob !== null && !isNumericallySafe(input.iob)) {
+    errors.push(`IOB inválido: o valor "${input.iob}" não é um número válido.`);
+  }
+  if (!isNumericallySafe(input.icr)) {
+    errors.push(`ICR inválido: o valor "${input.icr}" não é um número válido.`);
+  }
+  if (!isNumericallySafe(input.isf)) {
+    errors.push(`ISF inválido: o valor "${input.isf}" não é um número válido.`);
+  }
+
+  // Retorno antecipado: se os tipos são inválidos, não continuar para evitar NaN nas comparações
+  if (errors.length > 0) {
+    return { isValid: false, isHypo: false, errors, warnings };
+  }
+
+  // --- Validação de Faixas Clínicas ---
   const bg = Number(input.glucose);
-  const carbs = Number(input.carbs || 0);
-  const iob = Number(input.iob || 0);
+  const carbs = Number(input.carbs ?? 0);
+  const iob = Number(input.iob ?? 0);
   const icr = Number(input.icr);
   const isf = Number(input.isf);
 
-  if (isNaN(icr) || icr < SAFETY_LIMITS.MIN_ICR || icr > SAFETY_LIMITS.MAX_ICR) {
-    errors.push(`ICR inválido (${input.icr}). Deve estar entre ${SAFETY_LIMITS.MIN_ICR} e ${SAFETY_LIMITS.MAX_ICR} g/U.`);
+  if (icr < SAFETY_LIMITS.MIN_ICR || icr > SAFETY_LIMITS.MAX_ICR) {
+    errors.push(`ICR inválido (${icr}). Deve estar entre ${SAFETY_LIMITS.MIN_ICR} e ${SAFETY_LIMITS.MAX_ICR} g/U.`);
   }
 
-  if (isNaN(isf) || isf < SAFETY_LIMITS.MIN_ISF || isf > SAFETY_LIMITS.MAX_ISF) {
-    errors.push(`ISF inválido (${input.isf}). Deve estar entre ${SAFETY_LIMITS.MIN_ISF} e ${SAFETY_LIMITS.MAX_ISF} mg/dL/U.`);
+  if (isf < SAFETY_LIMITS.MIN_ISF || isf > SAFETY_LIMITS.MAX_ISF) {
+    errors.push(`ISF inválido (${isf}). Deve estar entre ${SAFETY_LIMITS.MIN_ISF} e ${SAFETY_LIMITS.MAX_ISF} mg/dL/U.`);
   }
 
-  if (isNaN(bg) || bg < SAFETY_LIMITS.MIN_GLUCOSE || bg > SAFETY_LIMITS.MAX_GLUCOSE) {
-    errors.push(`Glicemia inválida (${input.glucose} mg/dL). Deve estar entre ${SAFETY_LIMITS.MIN_GLUCOSE} e ${SAFETY_LIMITS.MAX_GLUCOSE} mg/dL.`);
+  if (bg < SAFETY_LIMITS.MIN_GLUCOSE || bg > SAFETY_LIMITS.MAX_GLUCOSE) {
+    errors.push(`Glicemia inválida (${bg} mg/dL). Deve estar entre ${SAFETY_LIMITS.MIN_GLUCOSE} e ${SAFETY_LIMITS.MAX_GLUCOSE} mg/dL.`);
   }
 
   if (bg <= SAFETY_LIMITS.CRITICAL_LOW) {

@@ -75,12 +75,14 @@ export function calculateBolus(params) {
   const cgmMod = CGM_TREND_MODIFIERS[cgmTrendKey] || CGM_TREND_MODIFIERS.FLAT;
   const bg = bgInput + cgmMod.bgAdjustment;
 
-  // 2. Meta de Glicemia Alvo baseada no perfil
+  // 2. Meta de Glicemia Alvo baseada no perfil (CROSS-01: aceitar targetGlucose OU target)
   const patientProfile = PATIENT_PROFILES[profileKey] || PATIENT_PROFILES.ADULT;
-  const target = Number(params.target || patientProfile.targetGlucose || 100);
+  const target = Number(params.target ?? params.targetGlucose ?? patientProfile.targetGlucose ?? 100);
 
   const exerciseKey = params.exercise || 'NONE';
-  const roundingStep = Number(params.roundingStep || params.doseIncrement || 0.5);
+  // GAP-03: roundingStep=0 causava NaN. Fallback seguro para 0.5 U.
+  const rawStep = Number(params.roundingStep ?? params.doseIncrement ?? 0.5);
+  const roundingStep = (rawStep > 0) ? rawStep : 0.5;
 
   if (validation.isHypo) {
     return {
@@ -153,9 +155,11 @@ export function calculateBolus(params) {
   confidenceScore = Math.max(50, Math.min(98, confidenceScore));
 
   // 11. Recomendações e Simulação Preditiva
+  // CROSS-03: propagar diaHours personalizado do paciente (se fornecido e válido)
+  const customDiaHours = (params.diaHours && Number(params.diaHours) > 0) ? Number(params.diaHours) : null;
   const preBolusTiming = calculateRecommendedPreBolus(bgInput);
   const mealAbsorption = MEAL_ABSORPTION_TYPES[mealTypeKey] || MEAL_ABSORPTION_TYPES.MODERATE;
-  const predictions = simulatePredictiveGlucosePoints(bgInput, carbs, recommendedDose, iob, isf, icr, insulinType);
+  const predictions = simulatePredictiveGlucosePoints(bgInput, carbs, recommendedDose, iob, isf, icr, insulinType, customDiaHours);
 
   const auditHash = generateChainAuditHash(params, recommendedDose, 'APPROVED');
 
@@ -196,12 +200,13 @@ export function calculateBolus(params) {
   };
 }
 
-function simulatePredictiveGlucosePoints(bg, carbs, dose, iob, isf, icr, insulinType) {
+function simulatePredictiveGlucosePoints(bg, carbs, dose, iob, isf, icr, insulinType, customDiaHours = null) {
   const points = [];
   const intervals = [30, 60, 90, 120, 180, 240];
 
   for (const min of intervals) {
-    const iobFrac = calculateIOBFraction(min, insulinType);
+    // CROSS-03: usar DIA personalizado do paciente na simulação preditiva
+    const iobFrac = calculateIOBFraction(min, insulinType, customDiaHours);
     const activeInsulinDrawn = dose * (1 - iobFrac);
     const bgDrop = activeInsulinDrawn * isf;
 

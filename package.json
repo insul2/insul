@@ -7,7 +7,8 @@
   "scripts": {
     "build": "cd backend && npm install && cd ../frontend && npm install && npm run build",
     "start": "cd backend && npm start",
-    "test": "node tests/test_engine.js"
+    "test:vv": "node tests/vv_suite/run_all_vv.js",
+    "test": "node tests/test_engine.js && node tests/regression_suite.js && node tests/api_integration.test.js && npm run test:vv"
   },
   "keywords": [],
   "author": "LEBEN Engineering",
