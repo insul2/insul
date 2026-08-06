@@ -12,6 +12,13 @@ export default function GlucoseLogPage() {
   const [isNfcScanning, setIsNfcScanning] = useState(false);
   const [nfcStatusMsg, setNfcStatusMsg] = useState('');
 
+  // Estado para Modal LibreLinkUp (Abbott Cloud)
+  const [showLibreModal, setShowLibreModal] = useState(false);
+  const [libreEmail, setLibreEmail] = useState('');
+  const [librePassword, setLibrePassword] = useState('');
+  const [libreRegion, setLibreRegion] = useState('us');
+  const [libreLoading, setLibreLoading] = useState(false);
+
   // Estado para Edição Inline
   const [editingItem, setEditingItem] = useState(null);
   const [editDose, setEditDose] = useState('');
@@ -260,26 +267,7 @@ export default function GlucoseLogPage() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={async () => {
-              setNfcStatusMsg('🔄 Sincronizando com a Nuvem LibreLinkUp (Abbott)...');
-              try {
-                const token = localStorage.getItem('leben_token');
-                const res = await fetch('/api/v1/connectors/librelinkup/sync', {
-                  method: 'POST',
-                  headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ username: 'paciente@email.com', password: '***' })
-                });
-                const json = await res.json();
-                if (json.status === 'success') {
-                  setNfcStatusMsg(`🎉 Nuvem LibreLinkUp Sincronizada! Glicemia Atual: ${json.data.glucoseMgDl} mg/dL (${json.data.trend})`);
-                  fetchReadings();
-                } else {
-                  setNfcStatusMsg(`⚠️ Sincronização LibreLinkUp: ${json.message}`);
-                }
-              } catch (e) {
-                setNfcStatusMsg('❌ Não foi possível conectar ao serviço LibreLinkUp.');
-              }
-            }}
+            onClick={() => setShowLibreModal(true)}
             className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold px-4 py-2.5 rounded-xl shadow-sm text-xs transition-all"
             title="Conectar com a nuvem do LibreLinkUp (Abbott)"
           >
@@ -308,15 +296,115 @@ export default function GlucoseLogPage() {
         </div>
       </div>
 
-      {/* Painel de Status do Leitor NFC */}
-      {nfcStatusMsg && (
-        <div className="bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 rounded-xl p-3 text-xs text-sky-800 dark:text-sky-200 flex items-center justify-between shadow-xs animate-in fade-in">
-          <div className="flex items-center gap-2">
-            <Wifi className="w-4 h-4 text-sky-500 animate-pulse shrink-0" />
-            <span>{nfcStatusMsg}</span>
+      {/* MODAL DE CONEXÃO REAL LIBRELINKUP (ABBOTT) */}
+      {showLibreModal && (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!libreEmail || !librePassword) return;
+            setLibreLoading(true);
+            setNfcStatusMsg('🔄 Conectando à Nuvem LibreLinkUp da Abbott...');
+            try {
+              const token = localStorage.getItem('leben_token');
+              const res = await fetch('/api/v1/connectors/librelinkup/sync', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  username: libreEmail,
+                  password: librePassword,
+                  region: libreRegion
+                })
+              });
+              const json = await res.json();
+              if (json.status === 'success') {
+                setNfcStatusMsg(`🎉 Nuvem Abbott Sincronizada com Sucesso! Paciente: ${json.data.patientName || 'Pedro'} — Glicemia Atual: ${json.data.glucoseMgDl} mg/dL (${json.data.trend})`);
+                setShowLibreModal(false);
+                fetchReadings();
+              } else {
+                setNfcStatusMsg(`⚠️ Erro no LibreLinkUp: ${json.message}`);
+              }
+            } catch (err) {
+              setNfcStatusMsg('❌ Falha na conexão com a nuvem Abbott. Verifique sua internet.');
+            } finally {
+              setLibreLoading(false);
+            }
+          }}
+          className="bg-gradient-to-r from-teal-900/90 to-slate-900 border border-teal-500/40 rounded-2xl p-5 space-y-4 shadow-xl text-white animate-in fade-in slide-in-from-top-2"
+        >
+          <div className="flex items-center justify-between border-b border-teal-500/30 pb-2">
+            <h3 className="text-sm font-black flex items-center gap-2 text-teal-300">
+              <Wifi className="w-4 h-4 text-teal-400" />
+              <span>Conectar Conta LibreLinkUp (Abbott Cloud)</span>
+            </h3>
+            <button type="button" onClick={() => setShowLibreModal(false)} className="text-slate-400 hover:text-white font-bold">
+              <X className="w-4 h-4" />
+            </button>
           </div>
-          <button onClick={() => setNfcStatusMsg('')} className="text-sky-400 hover:text-sky-600 font-bold ml-2">✕</button>
-        </div>
+
+          <p className="text-xs text-slate-300">
+            Digite seu e-mail e senha cadastrados no aplicativo oficial <strong>LibreLinkUp</strong> da Abbott para puxar a glicemia atual em tempo real:
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 mb-1">E-mail LibreLinkUp</label>
+              <input
+                type="email"
+                placeholder="seu.email@exemplo.com"
+                value={libreEmail}
+                onChange={(e) => setLibreEmail(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-teal-400"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 mb-1">Senha</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={librePassword}
+                onChange={(e) => setLibrePassword(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-teal-400"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-300 mb-1">Região da Conta</label>
+              <select
+                value={libreRegion}
+                onChange={(e) => setLibreRegion(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:border-teal-400"
+              >
+                <option value="us">América (US / Brasil / Latam)</option>
+                <option value="eu">Europa (EU)</option>
+                <option value="de">Alemanha (DE)</option>
+                <option value="fr">França (FR)</option>
+                <option value="jp">Japão (JP)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setShowLibreModal(false)}
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={libreLoading}
+              className="px-5 py-2 rounded-xl text-xs font-bold bg-teal-500 hover:bg-teal-400 text-slate-950 shadow-md flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {libreLoading ? <Radio className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+              <span>{libreLoading ? 'Conectando...' : 'Conectar & Puxar Glicemia'}</span>
+            </button>
+          </div>
+        </form>
       )}
 
       {showAddModal && (
