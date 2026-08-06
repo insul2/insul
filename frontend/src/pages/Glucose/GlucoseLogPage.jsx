@@ -5,6 +5,7 @@ export default function GlucoseLogPage() {
   const [readings, setReadings] = useState([]);
   const [bolusHistory, setBolusHistory] = useState([]);
   const [filterType, setFilterType] = useState('ALL');
+  const [dateRange, setDateRange] = useState('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
 
   const [newGlucose, setNewGlucose] = useState('');
@@ -257,8 +258,27 @@ export default function GlucoseLogPage() {
   ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   const filteredEvents = allEvents.filter((e) => {
-    if (filterType === 'BOLUS') return e.eventType === 'BOLUS';
-    if (filterType === 'GLUCOSE') return e.eventType === 'GLUCOSE';
+    // 1. Filtro por Tipo de Evento
+    if (filterType === 'BOLUS' && e.eventType !== 'BOLUS') return false;
+    if (filterType === 'GLUCOSE' && e.eventType !== 'GLUCOSE') return false;
+
+    // 2. Filtro por Período de Data
+    if (!e.timestamp) return true;
+    const eventDate = new Date(e.timestamp);
+    const now = new Date();
+
+    if (dateRange === 'TODAY') {
+      return eventDate.toDateString() === now.toDateString();
+    }
+    if (dateRange === '7DAYS') {
+      const diffDays = (now - eventDate) / (1000 * 60 * 60 * 24);
+      return diffDays <= 7;
+    }
+    if (dateRange === '30DAYS') {
+      const diffDays = (now - eventDate) / (1000 * 60 * 60 * 24);
+      return diffDays <= 30;
+    }
+
     return true;
   });
 
@@ -565,11 +585,11 @@ export default function GlucoseLogPage() {
       )}
 
       {/* Filtros */}
-      <div className="flex items-center justify-between bg-white dark:bg-slate-900 p-2 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
         <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto">
           <button
             onClick={() => setFilterType('ALL')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               filterType === 'ALL'
                 ? 'bg-teal-600 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -580,18 +600,18 @@ export default function GlucoseLogPage() {
 
           <button
             onClick={() => setFilterType('BOLUS')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               filterType === 'BOLUS'
                 ? 'bg-teal-600 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
-            💉 Doses Aplicadas ({allEvents.filter(e => e.eventType === 'BOLUS').length})
+            💉 Doses ({allEvents.filter(e => e.eventType === 'BOLUS').length})
           </button>
 
           <button
             onClick={() => setFilterType('GLUCOSE')}
-            className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
               filterType === 'GLUCOSE'
                 ? 'bg-teal-600 text-white shadow-xs'
                 : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -599,6 +619,29 @@ export default function GlucoseLogPage() {
           >
             🩸 Glicemia ({allEvents.filter(e => e.eventType === 'GLUCOSE').length})
           </button>
+        </div>
+
+        {/* Seletor de Período Temporal */}
+        <div className="flex items-center gap-1 w-full sm:w-auto justify-end border-t sm:border-t-0 border-slate-100 dark:border-slate-800 pt-2 sm:pt-0">
+          <span className="text-[11px] font-semibold text-slate-400 mr-1 hidden sm:inline">Período:</span>
+          {[
+            { id: 'ALL', label: '🗓️ Ver Tudo' },
+            { id: 'TODAY', label: '☀️ Hoje' },
+            { id: '7DAYS', label: '📅 7 Dias' },
+            { id: '30DAYS', label: '📊 30 Dias' }
+          ].map(p => (
+            <button
+              key={p.id}
+              onClick={() => setDateRange(p.id)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                dateRange === p.id
+                  ? 'bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 shadow-xs'
+                  : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
         </div>
       </div>
 
