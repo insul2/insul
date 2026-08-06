@@ -1,7 +1,9 @@
 /**
  * Controller para Integrações de CGM e Conectores Externos — LEBEN Engine V4.0
- * Conexão REAL HTTP com a Nuvem da Abbott (LibreLinkUp API)
- * Suporta SHA-256 account-id hashing e version header 4.16.0 para bypass de status 430/403.
+ * Suporta:
+ * 1. LibreLinkUp (Abbott Cloud Real-Time Sync & 12h Historical Backfill)
+ * 2. Background Sync Engine (Sincronização Contínua Automática a cada 5~15 min)
+ * 3. Nightscout / xDrip+ Webhook Connector
  */
 
 import crypto from 'crypto';
@@ -16,7 +18,6 @@ const LIBRE_TREND_MAP = {
   5: '⬆️ Subindo Rápido'
 };
 
-// Endpoints da Nuvem da Abbott por Região
 const REGION_URLS = {
   la: 'https://api-la.libreview.io',
   br: 'https://api-la.libreview.io',
@@ -37,13 +38,147 @@ const DEFAULT_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 };
 
+// Armazenamento em memória das conexões ativas para o Worker de Segundo Plano (Background Sync)
+const activeSyncJobs = new Map();
+
 /**
- * Conector REAL para a nuvem do LibreLinkUp (Abbott)
+ * Função Auxiliar Interna para Buscar Dados da Nuvem da Abbott e Importar Histórico de 12h + Leitura Atual
+ */
+export async function performAbbottSync({ username, password, region = 'la', user }) {
+  let baseUrl = REGION_URLS[region] || REGION_URLS.la;
+
+  // 1. Autenticação na Nuvem da Abbott
+  let loginRes = await fetch(`${baseUrl}/llu/auth/login`, {
+    method: 'POST',
+    headers: DEFAULT_HEADERS,
+    body: JSON.stringify({ email: username, password })
+  });
+  let loginJson = await loginRes.json();
+
+  if (loginJson.data && loginJson.data.redirect && loginJson.data.region) {
+    const redirectedRegion = loginJson.data.region;
+    baseUrl = `https://api-${redirectedRegion}.libreview.io`;
+    loginRes = await fetch(`${baseUrl}/llu/auth/login`, {
+      method: 'POST',
+      headers: DEFAULT_HEADERS,
+      body: JSON.stringify({ email: username, password })
+    });
+    loginJson = await loginRes.json();
+  }
+
+  if (!loginRes.ok || loginJson.status !== 0 || !loginJson.data || !loginJson.data.authTicket) {
+    const errMsg = loginJson?.error?.message || 'E-mail ou senha do LibreLinkUp incorretos.';
+    throw new Error(`Falha no login com a Abbott LibreView: ${errMsg}`);
+  }
+
+  const token = loginJson.data.authTicket.token;
+  const accountId = loginJson.data.user.id;
+  const accountIdHash = crypto.createHash('sha256').update(accountId).digest('hex');
+
+  const authHeaders = {
+    ...DEFAULT_HEADERS,
+    'version': '4.16.0',
+    'account-id': accountIdHash,
+    'Authorization': `Bearer ${token}`
+  };
+
+  // 2. Obter Conexões e Sensores
+  const connectionsRes = await fetch(`${baseUrl}/llu/connections`, { headers: authHeaders });
+  const connectionsJson = await connectionsRes.json();
+
+  if (!connectionsRes.ok || !connectionsJson.data || !Array.isArray(connectionsJson.data) || connectionsJson.data.length === 0) {
+    throw new Error('Nenhum paciente ou sensor associado a esta conta do LibreLinkUp.');
+  }
+
+  const patientConnection = connectionsJson.data[0];
+  const patientId = patientConnection.patientId || accountId;
+  const patientName = `${patientConnection.firstName || ''} ${patientConnection.lastName || ''}`.trim() || 'Paciente';
+
+  // 3. Buscar Gráfico e Histórico Completo de 12h~24h
+  const graphRes = await fetch(`${baseUrl}/llu/connections/${patientId}/graph`, { headers: authHeaders });
+  const graphJson = await graphRes.json();
+
+  let importedCount = 0;
+  let latestGlucose = null;
+  let latestTrend = '➡️ Estável';
+  let latestTimestamp = new Date().toISOString();
+
+  // A) Processar a leitura live mais recente
+  if (patientConnection.glucoseMeasurement) {
+    latestGlucose = patientConnection.glucoseMeasurement.ValueInMgPerDl || patientConnection.glucoseMeasurement.Value;
+    latestTrend = LIBRE_TREND_MAP[patientConnection.glucoseMeasurement.TrendArrow] || '➡️ Estável';
+    latestTimestamp = patientConnection.glucoseMeasurement.Timestamp || latestTimestamp;
+  } else if (graphJson.data && graphJson.data.connection && graphJson.data.connection.glucoseMeasurement) {
+    const m = graphJson.data.connection.glucoseMeasurement;
+    latestGlucose = m.ValueInMgPerDl || m.Value;
+    latestTrend = LIBRE_TREND_MAP[m.TrendArrow] || '➡️ Estável';
+    latestTimestamp = m.Timestamp || latestTimestamp;
+  }
+
+  // B) Importar histórico retroativo completo (array graphData das últimas 12h~24h)
+  const historyPoints = (graphJson.data && graphJson.data.graphData) ? graphJson.data.graphData : [];
+  for (const point of historyPoints) {
+    const bg = point.ValueInMgPerDl || point.Value;
+    if (bg && bg >= 40 && bg <= 500) {
+      const ptTrend = LIBRE_TREND_MAP[point.TrendArrow] || '➡️ Estável';
+      const ptTime = point.Timestamp || new Date().toISOString();
+
+      const internalReq = {
+        user,
+        headers: { 'x-idempotency-key': `librelinkup_hist_${patientId}_${ptTime}` },
+        body: {
+          glucoseMgDl: Number(bg),
+          trend: ptTrend,
+          record_type: 'LIBRE_LINK_UP'
+        }
+      };
+
+      const internalRes = {
+        status(c) { this.statusCode = c; return this; },
+        json(d) { return this; }
+      };
+
+      await logGlucoseReadingHandler(internalReq, internalRes);
+      importedCount++;
+    }
+  }
+
+  // C) Salvar a leitura live mais recente
+  if (latestGlucose) {
+    const internalReq = {
+      user,
+      headers: { 'x-idempotency-key': `librelinkup_live_${patientId}_${latestTimestamp}` },
+      body: {
+        glucoseMgDl: Number(latestGlucose),
+        trend: latestTrend,
+        record_type: 'LIBRE_LINK_UP'
+      }
+    };
+
+    const internalRes = {
+      status(c) { this.statusCode = c; return this; },
+      json(d) { return this; }
+    };
+
+    await logGlucoseReadingHandler(internalReq, internalRes);
+  }
+
+  return {
+    patientName,
+    glucoseMgDl: Number(latestGlucose),
+    trend: latestTrend,
+    timestamp: latestTimestamp,
+    importedCount
+  };
+}
+
+/**
+ * Conector HTTP Manual/Trigger
  * POST /api/v1/connectors/librelinkup/sync
  */
 export async function syncLibreLinkUpHandler(req, res) {
   try {
-    const { username, password, region = 'la' } = req.body || {};
+    const { username, password, region = 'la', autoSync = true } = req.body || {};
 
     if (!username || !password) {
       return res.status(400).json({
@@ -52,146 +187,36 @@ export async function syncLibreLinkUpHandler(req, res) {
       });
     }
 
-    let baseUrl = REGION_URLS[region] || REGION_URLS.la;
+    // Executa a primeira sincronização completa
+    const result = await performAbbottSync({ username, password, region, user: req.user });
 
-    // ── ETAPA 1: Autenticação na Nuvem da Abbott (Login Inicial) ──────────────
-    let loginRes;
-    try {
-      loginRes = await fetch(`${baseUrl}/llu/auth/login`, {
-        method: 'POST',
-        headers: DEFAULT_HEADERS,
-        body: JSON.stringify({ email: username, password })
-      });
-    } catch (netErr) {
-      return res.status(502).json({
-        status: 'error',
-        message: 'Não foi possível conectar aos servidores da Abbott LibreView. Verifique sua conexão.'
-      });
+    // Registra a sincronização contínua em segundo plano a cada 5 minutos
+    if (autoSync && !activeSyncJobs.has(req.user.id)) {
+      const intervalId = setInterval(async () => {
+        try {
+          console.log(`🔄 [BACKGROUND SYNC LEBEN] Atualizando glicemia da Abbott para ${req.user.name || req.user.email}...`);
+          const bgResult = await performAbbottSync({ username, password, region, user: req.user });
+          console.log(`✅ [BACKGROUND SYNC LEBEN] Sucesso! Nova Glicemia: ${bgResult.glucoseMgDl} mg/dL (${bgResult.trend})`);
+        } catch (bgErr) {
+          console.error('⚠️ [BACKGROUND SYNC LEBEN] Erro ao sincronizar em segundo plano:', bgErr.message);
+        }
+      }, 5 * 60 * 1000); // 5 minutos
+
+      activeSyncJobs.set(req.user.id, { intervalId, username, region });
     }
-
-    let loginJson = await loginRes.json();
-
-    // Tratamento de Redirecionamento de Região da Abbott (ex: US -> LA)
-    if (loginJson.data && loginJson.data.redirect && loginJson.data.region) {
-      const redirectedRegion = loginJson.data.region;
-      baseUrl = `https://api-${redirectedRegion}.libreview.io`;
-      loginRes = await fetch(`${baseUrl}/llu/auth/login`, {
-        method: 'POST',
-        headers: DEFAULT_HEADERS,
-        body: JSON.stringify({ email: username, password })
-      });
-      loginJson = await loginRes.json();
-    }
-
-    if (!loginRes.ok || loginJson.status !== 0 || !loginJson.data || !loginJson.data.authTicket) {
-      const errMsg = loginJson?.error?.message || 'E-mail ou senha do LibreLinkUp incorretos.';
-      return res.status(401).json({
-        status: 'error',
-        message: `Falha no login com a Abbott LibreView: ${errMsg}`
-      });
-    }
-
-    const token = loginJson.data.authTicket.token;
-    const accountId = loginJson.data.user.id;
-    const accountIdHash = crypto.createHash('sha256').update(accountId).digest('hex');
-
-    // Headers Autenticados com SHA-256 account-id (Requisito Abbott 2026 / LLU 4.16.0)
-    const authHeaders = {
-      ...DEFAULT_HEADERS,
-      'version': '4.16.0',
-      'account-id': accountIdHash,
-      'Authorization': `Bearer ${token}`
-    };
-
-    // ── ETAPA 2: Obter Lista de Pacientes/Conexões de Sensores ───────────────
-    const connectionsRes = await fetch(`${baseUrl}/llu/connections`, {
-      headers: authHeaders
-    });
-    const connectionsJson = await connectionsRes.json();
-
-    if (!connectionsRes.ok || !connectionsJson.data || !Array.isArray(connectionsJson.data) || connectionsJson.data.length === 0) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Nenhum paciente ou sensor associado a esta conta do LibreLinkUp. Verifique se o convite foi aceito no app LibreLinkUp.'
-      });
-    }
-
-    // Seleciona a primeira conexão/sensor ativo do paciente
-    const patientConnection = connectionsJson.data[0];
-    const patientId = patientConnection.patientId || accountId;
-
-    // ── ETAPA 3: Extrair Glicemia em Tempo Real da Conexão ────────────────────
-    let glucoseVal = null;
-    let trendCode = 3;
-    let timestamp = new Date().toISOString();
-
-    if (patientConnection.glucoseMeasurement) {
-      glucoseVal = patientConnection.glucoseMeasurement.ValueInMgPerDl || patientConnection.glucoseMeasurement.Value;
-      trendCode = patientConnection.glucoseMeasurement.TrendArrow || 3;
-      timestamp = patientConnection.glucoseMeasurement.Timestamp || timestamp;
-    } else {
-      // Fallback: Busca via endpoint de gráfico da conexão
-      const graphRes = await fetch(`${baseUrl}/llu/connections/${patientId}/graph`, {
-        headers: authHeaders
-      });
-      const graphJson = await graphRes.json();
-
-      if (graphJson.data && graphJson.data.connection && graphJson.data.connection.glucoseMeasurement) {
-        const measurement = graphJson.data.connection.glucoseMeasurement;
-        glucoseVal = measurement.ValueInMgPerDl || measurement.Value;
-        trendCode = measurement.TrendArrow || 3;
-        timestamp = measurement.Timestamp || timestamp;
-      }
-    }
-
-    if (!glucoseVal) {
-      return res.status(404).json({
-        status: 'error',
-        message: 'Nenhuma medição recente encontrada para este sensor na nuvem da Abbott.'
-      });
-    }
-
-    const formattedTrend = LIBRE_TREND_MAP[trendCode] || '➡️ Estável';
-
-    // ── ETAPA 4: Salvar a Glicemia Real no Banco do LEBEN ─────────────────────
-    const internalReq = {
-      user: req.user,
-      headers: { 'x-idempotency-key': `librelinkup_${patientId}_${timestamp}` },
-      body: {
-        glucoseMgDl: Number(glucoseVal),
-        trend: formattedTrend,
-        record_type: 'LIBRE_LINK_UP'
-      }
-    };
-
-    let responseData = null;
-    const internalRes = {
-      status(code) { this.statusCode = code; return this; },
-      json(data) { responseData = data; return this; }
-    };
-
-    await logGlucoseReadingHandler(internalReq, internalRes);
-
-    const patientName = `${patientConnection.firstName || ''} ${patientConnection.lastName || ''}`.trim() || 'Paciente';
 
     return res.status(200).json({
       status: 'success',
-      message: 'Sincronizado em tempo real com a Nuvem LibreLinkUp da Abbott!',
+      message: `Sincronização em tempo real concluída! ${result.importedCount} pontos das últimas 12h importados! Sincronização contínua ativa.`,
       source: 'Abbott LibreLinkUp Cloud API',
-      data: {
-        patientName,
-        glucoseMgDl: Number(glucoseVal),
-        trend: formattedTrend,
-        timestamp: timestamp
-      }
+      data: result
     });
 
   } catch (error) {
-    console.error('❌ Erro no Conector Real LibreLinkUp:', error);
+    console.error('❌ Erro no Conector LibreLinkUp:', error);
     return res.status(500).json({
       status: 'error',
-      message: 'Erro interno ao processar sincronização com a Abbott LibreView.',
-      error: error.message
+      message: error.message || 'Erro ao sincronizar com a Abbott LibreView.'
     });
   }
 }

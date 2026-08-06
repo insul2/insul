@@ -323,7 +323,7 @@ export default function GlucoseLogPage() {
               });
               const json = await res.json();
               if (res.ok && json.status === 'success') {
-                setNfcStatusMsg(`🎉 Nuvem Abbott Sincronizada! Paciente: ${json.data.patientName || 'Pedro'} — Glicemia Atual: ${json.data.glucoseMgDl} mg/dL (${json.data.trend})`);
+                setNfcStatusMsg(`🎉 Nuvem Abbott Conectada 24h! Paciente: ${json.data.patientName || 'Pedro'} — Atual: ${json.data.glucoseMgDl} mg/dL (${json.data.trend}) — Sincronização automática ativa a cada 5 min!`);
                 setShowLibreModal(false);
                 fetchReadings();
               } else {
