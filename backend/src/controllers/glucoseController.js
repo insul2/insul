@@ -150,9 +150,8 @@ export async function logGlucoseReadingHandler(req, res) {
     try {
       if (mongoose.connection.readyState === 1) {
         const GlucoseReadingMongo = getGlucoseReadingModel();
-        const patientIdVal = mongoose.Types.ObjectId.isValid(userId) ? new mongoose.Types.ObjectId(userId) : userId;
         await GlucoseReadingMongo.create({
-          patient_id: patientIdVal,
+          patient_id: userId,
           glucose_mgdl: newReading.glucoseMgDl,
           read_at: readingDate,
           trend: newReading.trend,
